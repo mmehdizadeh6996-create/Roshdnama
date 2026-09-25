@@ -1,10 +1,12 @@
 // رشدنما - بک‌اند تحلیل واقعی سایت با Google PageSpeed Insights API
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 
 const app = express();
-app.use(cors()); // اجازه فراخوانی از صفحه‌ی منتشرشده
+app.use(cors()); // اجازه فراخوانی از دامنه‌های دیگر (اگر لازم شد)
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public'))); // سرو کردن سایت از همین سرویس
 
 const PSI_KEY = process.env.PSI_API_KEY || ''; // اختیاری؛ بدون کلید هم کار می‌کند ولی با محدودیت بیشتر
 
