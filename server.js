@@ -6,7 +6,8 @@ const path = require('path');
 const app = express();
 app.use(cors()); // اجازه فراخوانی از دامنه‌های دیگر (اگر لازم شد)
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public'))); // سرو کردن سایت از همین سرویس
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'roshdnama.html')));
+app.use(express.static(__dirname, { index: false })); // سرو کردن فایل‌های استاتیک از ریشه‌ی پروژه
 
 const PSI_KEY = process.env.PSI_API_KEY || ''; // اختیاری؛ بدون کلید هم کار می‌کند ولی با محدودیت بیشتر
 
