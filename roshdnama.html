@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>رشدنما | سئو و رشد کسب‌وکار</title>
+<title>رشدینک | سئو و رشد کسب‌وکار</title>
 <meta name="description" content="آدرس سایتت را وارد کن تا تحلیل اولیه سئو و پیشنهاد خدمات مناسب را ببینی، یا از بین سه پلن رشد انتخاب کن.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -198,7 +198,7 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
 
 <header class="top">
   <div class="wrap bar">
-    <a class="logo" href="#top"><i>ر</i>رشدنما</a>
+    <a class="logo" href="#top"><i>ر</i>رشدینک</a>
     <nav class="links" id="nav" aria-label="منوی اصلی">
       <a href="#top">تحلیل رایگان</a>
       <a href="#plans">پلن‌ها</a>
@@ -370,7 +370,7 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
 </main>
 
 <footer>
-  <div class="wrap foot"><span>© رشدنما، خدمات سئو و رشد کسب‌وکار</span><span>نام و اطلاعات این صفحه نمونه است</span></div>
+  <div class="wrap foot"><span>© رشدینک، خدمات سئو و رشد کسب‌وکار</span><span>roshdink.ir</span></div>
 </footer>
 
 <script>
@@ -407,9 +407,9 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
         '<h3>'+p.name+'</h3><p class="muted">'+p.tag+'</p>'+
         '<div class="price">'+fa(priceOf(p))+'</div><div class="per">تومان در ماه'+(billing===3?'، پرداخت سه‌ماهه':'')+'</div>'+
         '<ul>'+p.feat.map(function(f){return '<li>'+f+'</li>'}).join('')+'</ul>'+
-        '<a class="btn'+(p.pop?'':' ghost')+' block" href="#contact" data-plan="'+p.id+'">انتخاب پلن '+p.name+'</a></article>';
+        '<button type="button" class="btn'+(p.pop?'':' ghost')+' block" data-plan="'+p.id+'">خرید و پرداخت پلن '+p.name+'</button></article>';
     }).join('');
-    $$('#plans-grid [data-plan]').forEach(function(a){a.addEventListener('click',function(){setContactPlan(a.getAttribute('data-plan'))})});
+    $$('#plans-grid [data-plan]').forEach(function(b){b.addEventListener('click',function(){startPayment(b.getAttribute('data-plan'),b)})});
     renderROI();
   }
   $$('.toggle button').forEach(function(b){b.onclick=function(){
@@ -421,6 +421,40 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
   /* contact select */
   $('#cplan').innerHTML='<option value="">هنوز مطمئن نیستم</option>'+PLANS.map(function(p){return '<option value="'+p.id+'">پلن '+p.name+'</option>'}).join('');
   function setContactPlan(id){$('#cplan').value=id}
+
+  function startPayment(planId,btn){
+    var old=btn.textContent;btn.textContent='در حال اتصال به درگاه…';btn.disabled=true;
+    fetch('/api/payment/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({planId:planId,billing:billing})})
+      .then(function(r){return r.json().then(function(j){return {ok:r.ok,body:j}})})
+      .then(function(r){
+        if(!r.ok||!r.body.paymentUrl) throw new Error(r.body&&r.body.error?r.body.error:'خطا در اتصال به درگاه');
+        window.location.href=r.body.paymentUrl;
+      })
+      .catch(function(err){
+        alert(err.message||'اتصال به درگاه پرداخت ناموفق بود. کمی بعد دوباره امتحان کن.');
+        btn.textContent=old;btn.disabled=false;
+      });
+  }
+
+  /* payment result banner (after returning from gateway) */
+  (function(){
+    var q=new URLSearchParams(window.location.search), st=q.get('payment');
+    if(!st) return;
+    var planName=(PLANS.find(function(p){return p.id===q.get('plan')})||{}).name||'';
+    var box=document.createElement('div');
+    box.setAttribute('role','status');
+    box.style.cssText='position:sticky;top:calc(env(safe-area-inset-top,0px) + 64px);z-index:25;margin:0 16px;border-radius:14px;padding:14px 18px;font-weight:600;text-align:center';
+    if(st==='success'){
+      box.style.background='color-mix(in srgb,var(--good) 16%,var(--surface))';box.style.color='var(--good)';
+      box.textContent='پرداخت پلن '+planName+' با موفقیت انجام شد'+(q.get('ref')?(' — کد پیگیری: '+q.get('ref')):'')+'. به‌زودی با شما تماس می‌گیریم.';
+    } else {
+      box.style.background='color-mix(in srgb,var(--bad) 14%,var(--surface))';box.style.color='var(--bad)';
+      box.textContent='پرداخت انجام نشد یا لغو شد. می‌توانی دوباره تلاش کنی.';
+    }
+    document.body.insertBefore(box,document.body.firstChild.nextSibling||document.body.firstChild);
+    history.replaceState(null,'',window.location.pathname);
+  })();
+
 
   /* ROI */
   $('#rp').innerHTML=PLANS.map(function(p,i){return '<button type="button" data-i="'+i+'" aria-pressed="'+(i===1)+'">'+p.name+'</button>'}).join('');
