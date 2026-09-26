@@ -433,7 +433,7 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
         return r.json().then(function(j){return {ok:r.ok,body:j}});
       })
       .then(function(r){
-        if(!r.ok||!r.body.paymentUrl) throw new Error(r.body&&r.body.error?r.body.error:'خطا در اتصال به درگاه');
+        if(!r.ok||!r.body.paymentUrl) throw new Error((r.body&&r.body.error?r.body.error:'خطا در اتصال به درگاه')+(r.body&&r.body.detail?(' ('+r.body.detail+')'):''));
         window.location.href=r.body.paymentUrl;
       })
       .catch(function(err){
