@@ -425,7 +425,13 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
   function startPayment(planId,btn){
     var old=btn.textContent;btn.textContent='در حال اتصال به درگاه…';btn.disabled=true;
     fetch('/api/payment/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({planId:planId,billing:billing})})
-      .then(function(r){return r.json().then(function(j){return {ok:r.ok,body:j}})})
+      .then(function(r){
+        var ct=r.headers.get('content-type')||'';
+        if(ct.indexOf('application/json')===-1){
+          throw new Error('سرویس پرداخت روی سرور پیدا نشد (نسخه‌ی بک‌اند به‌روز نیست).');
+        }
+        return r.json().then(function(j){return {ok:r.ok,body:j}});
+      })
       .then(function(r){
         if(!r.ok||!r.body.paymentUrl) throw new Error(r.body&&r.body.error?r.body.error:'خطا در اتصال به درگاه');
         window.location.href=r.body.paymentUrl;
