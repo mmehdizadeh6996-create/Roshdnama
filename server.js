@@ -41,6 +41,7 @@ app.post('/api/payment/request', async (req, res) => {
     });
     const zData = await zRes.json();
     if (zData.result !== 100) {
+      console.error('Zibal request rejected:', JSON.stringify(zData));
       return res.status(502).json({ error: 'اتصال به درگاه پرداخت ناموفق بود.', detail: zData.message || zData.result });
     }
     res.json({ paymentUrl: `https://gateway.zibal.ir/start/${zData.trackId}` });
