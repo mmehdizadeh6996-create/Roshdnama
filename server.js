@@ -6,6 +6,73 @@ const path = require('path');
 const app = express();
 app.use(cors()); // اجازه فراخوانی از دامنه‌های دیگر (اگر لازم شد)
 app.use(express.json());
+const ZIBAL_MERCHANT = process.env.ZIBAL_MERCHANT || '';
+const PLANS = [
+  { id: 'start', name: 'شروع', price: 9800000 },
+  { id: 'growth', name: 'رشد', price: 24500000 },
+  { id: 'scale', name: 'تسلط', price: 59000000 },
+];
+function baseUrl(req) {
+  return process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
+}
+
+app.post('/api/payment/request', async (req, res) => {
+  try {
+    if (!ZIBAL_MERCHANT) return res.status(500).json({ error: 'درگاه پرداخت هنوز تنظیم نشده است.' });
+    const { planId, billing } = req.body || {};
+    const plan = PLANS.find(p => p.id === planId);
+    if (!plan) return res.status(400).json({ error: 'پلن نامعتبر است.' });
+    const cycle = Number(billing) === 3 ? 3 : 1;
+    const monthly = cycle === 3 ? Math.round((plan.price * 0.85) / 1000) * 1000 : plan.price;
+    const amountRial = monthly * cycle * 10; // تومان به ریال
+    const orderId = `${plan.id}-${cycle}-${Date.now()}`;
+    const callbackUrl = `${baseUrl(req)}/api/payment/callback`;
+
+    const zRes = await fetch('https://gateway.zibal.ir/v1/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        merchant: ZIBAL_MERCHANT,
+        amount: amountRial,
+        callbackUrl,
+        orderId,
+        description: `اشتراک پلن ${plan.name} - ${cycle} ماهه`,
+      }),
+    });
+    const zData = await zRes.json();
+    if (zData.result !== 100) {
+      return res.status(502).json({ error: 'اتصال به درگاه پرداخت ناموفق بود.', detail: zData.message || zData.result });
+    }
+    res.json({ paymentUrl: `https://gateway.zibal.ir/start/${zData.trackId}` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'خطای سرور در ایجاد پرداخت.' });
+  }
+});
+
+app.get('/api/payment/callback', async (req, res) => {
+  const { trackId, success, orderId } = req.query;
+  const planId = String(orderId || '').split('-')[0] || '';
+  try {
+    if (String(success) !== '1') {
+      return res.redirect(`/?payment=failed&plan=${encodeURIComponent(planId)}`);
+    }
+    const vRes = await fetch('https://gateway.zibal.ir/v1/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ merchant: ZIBAL_MERCHANT, trackId }),
+    });
+    const vData = await vRes.json();
+    if (vData.result === 100 || vData.result === 201) {
+      return res.redirect(`/?payment=success&plan=${encodeURIComponent(planId)}&ref=${encodeURIComponent(vData.refNumber || trackId)}`);
+    }
+    return res.redirect(`/?payment=failed&plan=${encodeURIComponent(planId)}`);
+  } catch (err) {
+    console.error(err);
+    return res.redirect(`/?payment=failed&plan=${encodeURIComponent(planId)}`);
+  }
+});
+
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'roshdnama.html')));
 app.use(express.static(__dirname, { index: false })); // سرو کردن فایل‌های استاتیک از ریشه‌ی پروژه
 
