@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>داشبورد من | رشدینک</title>
+<link href="https://fonts.googleapis.com/css2?family=Lalezar&family=Vazirmatn:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#f2f5fb;--surface:#fff;--surface2:#e9eefb;--ink:#0d1a3a;--muted:#56617f;--line:#d9e0f0;
+  --brand:#2450ff;--good:#0e9f6e;--warn:#d98a00;--bad:#d9443a;--shadow:0 18px 40px -22px rgba(13,26,58,.35);
+  --font:'Vazirmatn',Tahoma,sans-serif;--display:'Lalezar','Vazirmatn',Tahoma,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#081027;--surface:#101a38;--surface2:#16224a;--ink:#eaf0ff;--muted:#9aa8d0;--line:#24325f;--brand:#5b7bff;--good:#34d399;--warn:#f5b73b;--bad:#ff7a70;}}
+*{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);line-height:1.9;min-height:100vh}
+h1,h2{font-family:var(--display);font-weight:400;margin:0}
+.wrap{width:min(720px,100% - 32px);margin-inline:auto;padding:32px 0 60px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:24px;box-shadow:var(--shadow);margin-bottom:18px}
+.inp{width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--bg);min-height:48px;font-size:1.05rem;direction:ltr;text-align:right}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;cursor:pointer;border-radius:14px;padding:12px 22px;font-weight:700;background:var(--brand);color:#fff;min-height:48px;width:100%;margin-top:10px}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.muted{color:var(--muted)}
+.err{color:var(--bad);font-size:.9rem;margin-top:6px;display:none}
+.banner{border-radius:14px;padding:14px 18px;font-weight:600;text-align:center;margin-bottom:18px}
+.banner.ok{background:color-mix(in srgb,var(--good) 16%,var(--surface));color:var(--good)}
+.banner.bad{background:color-mix(in srgb,var(--bad) 14%,var(--surface));color:var(--bad)}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{padding:10px 8px;text-align:right;border-bottom:1px solid var(--line)}
+.tag{font-size:.75rem;padding:2px 10px;border-radius:99px;font-weight:700}
+.tag.paid{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
+.tag.pending{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.tag.failed{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.dev{background:color-mix(in srgb,var(--warn) 14%,var(--surface));border:1px dashed var(--warn);border-radius:12px;padding:10px 14px;font-size:.85rem;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><h1>داشبورد رشدینک</h1><a href="/" class="muted" style="text-decoration:none">← بازگشت به سایت</a></div>
+  <div id="banner"></div>
+
+  <div class="card" id="loginCard">
+    <h2 style="font-size:1.3rem;margin-bottom:10px">ورود به حساب</h2>
+    <p class="muted" style="margin-bottom:14px">با شماره موبایلی که سفارش دادی وارد شو.</p>
+    <div id="step1">
+      <input class="inp" id="phone" inputmode="tel" placeholder="09xxxxxxxxx" maxlength="11">
+      <button class="btn" id="sendCode">دریافت کد</button>
+      <div class="err" id="err1"></div>
+    </div>
+    <div id="step2" style="display:none">
+      <input class="inp" id="code" inputmode="numeric" maxlength="6" placeholder="کد ۶ رقمی">
+      <button class="btn" id="verifyCode">ورود</button>
+      <button class="btn ghost" id="backStep">شماره را عوض کن</button>
+      <div class="err" id="err2"></div>
+      <div class="dev" id="devBox" style="display:none"></div>
+    </div>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="card">
+      <h2 style="font-size:1.2rem">پروفایل</h2>
+      <p class="muted" style="margin-top:8px" id="profilePhone" style="direction:ltr"></p>
+      <button class="btn ghost" id="logout" style="margin-top:14px">خروج از حساب</button>
+    </div>
+    <div class="card">
+      <h2 style="font-size:1.2rem;margin-bottom:12px">تاریخچه سفارش‌ها</h2>
+      <div id="ordersBox"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var $=function(s){return document.querySelector(s)};
+var fa=function(n){try{return Number(n).toLocaleString('fa-IR')}catch(e){return n}};
+var STATUS={paid:'پرداخت‌شده',pending:'در انتظار پرداخت',failed:'ناموفق'};
+
+function showBanner(){
+  var q=new URLSearchParams(location.search), st=q.get('payment');
+  if(!st) return;
+  var b=$('#banner');
+  if(st==='success'){
+    b.innerHTML='<div class="banner ok">پرداخت با موفقیت انجام شد'+(q.get('ref')?(' — کد پیگیری: '+q.get('ref')):'')+'.</div>';
+  }else{
+    b.innerHTML='<div class="banner bad">پرداخت انجام نشد یا لغو شد.</div>';
+  }
+  history.replaceState(null,'',location.pathname);
+}
+
+function loadMe(){
+  fetch('/api/me').then(function(r){return r.json().then(function(j){return {ok:r.ok,body:j}})}).then(function(r){
+    if(!r.ok){ $('#loginCard').style.display='block'; $('#app').style.display='none'; return; }
+    $('#loginCard').style.display='none'; $('#app').style.display='block';
+    $('#profilePhone').textContent=r.body.phone;
+    var rows=r.body.orders||[];
+    if(!rows.length){ $('#ordersBox').innerHTML='<p class="muted">هنوز سفارشی ثبت نشده.</p>'; return; }
+    var html='<table><thead><tr><th>پلن</th><th>دوره</th><th>مبلغ</th><th>وضعیت</th><th>تاریخ</th></tr></thead><tbody>';
+    rows.forEach(function(o){
+      html+='<tr><td>'+o.plan_name+'</td><td>'+fa(o.cycle)+' ماهه</td><td>'+fa(o.amount_toman)+' ت</td>'+
+        '<td><span class="tag '+o.status+'">'+(STATUS[o.status]||o.status)+'</span></td>'+
+        '<td>'+new Date(o.created_at).toLocaleDateString('fa-IR')+'</td></tr>';
+    });
+    html+='</tbody></table>';
+    $('#ordersBox').innerHTML=html;
+  });
+}
+
+var currentPhone='';
+$('#sendCode').onclick=function(){
+  var phone=$('#phone').value.trim(), err=$('#err1');
+  if(!/^09\d{9}$/.test(phone)){err.textContent='شماره موبایل معتبر نیست.';err.style.display='block';return}
+  err.style.display='none';
+  this.disabled=true;var old=this.textContent;this.textContent='در حال ارسال…';var btn=this;
+  fetch('/api/auth/otp/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:phone})})
+    .then(function(r){return r.json().then(function(j){return {ok:r.ok,body:j}})})
+    .then(function(r){
+      btn.disabled=false;btn.textContent=old;
+      if(!r.ok){var e=$('#err1');e.textContent=r.body.error||'خطا در ارسال کد.';e.style.display='block';return}
+      currentPhone=phone;
+      $('#step1').style.display='none';$('#step2').style.display='block';
+      if(r.body.dev){$('#devBox').style.display='block';$('#devBox').textContent='حالت آزمایشی (بدون پیامک) — کد: '+r.body.devCode;}
+    });
+};
+$('#backStep').onclick=function(){$('#step1').style.display='block';$('#step2').style.display='none';$('#err2').style.display='none';};
+$('#verifyCode').onclick=function(){
+  var code=$('#code').value.trim(), err=$('#err2');
+  if(!/^\d{6}$/.test(code)){err.textContent='کد باید ۶ رقم باشد.';err.style.display='block';return}
+  err.style.display='none';
+  fetch('/api/auth/otp/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:currentPhone,code:code})})
+    .then(function(r){return r.json().then(function(j){return {ok:r.ok,body:j}})})
+    .then(function(r){
+      if(!r.ok){err.textContent=r.body.error||'ورود ناموفق بود.';err.style.display='block';return}
+      loadMe();
+    });
+};
+$('#logout').onclick=function(){fetch('/api/auth/logout',{method:'POST'}).then(function(){location.reload()})};
+
+showBanner();
+loadMe();
+</script>
+</body>
+</html>
