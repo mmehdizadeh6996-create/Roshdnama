@@ -68,6 +68,10 @@ nav.links a:hover{color:var(--ink)}
   nav.links a{padding:12px 4px;border-bottom:1px solid var(--line)}
   .bar-actions .btn{display:none}
 }
+.modal-overlay{display:none;position:fixed;inset:0;z-index:50;background:rgba(8,16,39,.55);align-items:center;justify-content:center;padding:16px}
+.modal-box{background:var(--surface);border-radius:22px;padding:24px;max-width:380px;width:100%;box-shadow:var(--shadow)}
+.modal-box h3{font-size:1.2rem;margin-bottom:6px}
+.modal-box p.muted{margin-bottom:14px}
 
 /* hero */
 .hero{padding:48px 0 40px}
@@ -208,6 +212,7 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
     </nav>
     <div class="bar-actions">
       <button class="icon-btn" id="theme" aria-label="تغییر تم روشن و تاریک" title="تغییر تم">◐</button>
+      <a class="btn ghost" href="/dashboard.html">داشبورد من</a>
       <a class="btn" href="#contact">مشاوره رایگان</a>
       <button class="icon-btn menu-btn" id="menu" aria-label="باز کردن منو" aria-expanded="false">☰</button>
     </div>
@@ -373,6 +378,19 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
   <div class="wrap foot"><span>© رشدینک، خدمات سئو و رشد کسب‌وکار</span><span>roshdink.ir</span></div>
 </footer>
 
+<div class="modal-overlay" id="phoneModal">
+  <div class="modal-box">
+    <h3>یک قدم مانده</h3>
+    <p class="muted">شماره موبایلت را وارد کن تا سفارش ثبت شود و بتوانی بعداً از داشبوردت پیگیری‌اش کنی.</p>
+    <form id="modalForm">
+      <input class="inp" id="modalPhone" type="tel" inputmode="tel" maxlength="11" placeholder="09xxxxxxxxx" style="direction:ltr;text-align:right" autocomplete="tel">
+      <div class="hint err" id="modalErr" style="display:none;margin-top:8px"></div>
+      <button type="submit" class="btn block" id="modalSubmit" style="margin-top:14px">ادامه و پرداخت</button>
+      <button type="button" class="btn ghost block" id="modalCancel" style="margin-top:8px">انصراف</button>
+    </form>
+  </div>
+</div>
+
 <script>
 (function(){
   var fa=function(n){try{return Number(n).toLocaleString('fa-IR')}catch(e){return String(n)}};
@@ -409,7 +427,7 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
         '<ul>'+p.feat.map(function(f){return '<li>'+f+'</li>'}).join('')+'</ul>'+
         '<button type="button" class="btn'+(p.pop?'':' ghost')+' block" data-plan="'+p.id+'">خرید و پرداخت پلن '+p.name+'</button></article>';
     }).join('');
-    $$('#plans-grid [data-plan]').forEach(function(b){b.addEventListener('click',function(){startPayment(b.getAttribute('data-plan'),b)})});
+    $$('#plans-grid [data-plan]').forEach(function(b){b.addEventListener('click',function(){openPhoneModal(b.getAttribute('data-plan'))})});
     renderROI();
   }
   $$('.toggle button').forEach(function(b){b.onclick=function(){
@@ -422,9 +440,27 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
   $('#cplan').innerHTML='<option value="">هنوز مطمئن نیستم</option>'+PLANS.map(function(p){return '<option value="'+p.id+'">پلن '+p.name+'</option>'}).join('');
   function setContactPlan(id){$('#cplan').value=id}
 
-  function startPayment(planId,btn){
+  var pendingPlan=null;
+  function openPhoneModal(planId){
+    pendingPlan=planId;
+    $('#modalPhone').value='';$('#modalErr').style.display='none';
+    $('#phoneModal').style.display='flex';
+    setTimeout(function(){$('#modalPhone').focus()},50);
+  }
+  function closePhoneModal(){$('#phoneModal').style.display='none'}
+  $('#modalCancel').addEventListener('click',closePhoneModal);
+  $('#phoneModal').addEventListener('click',function(e){if(e.target===this)closePhoneModal()});
+  $('#modalForm').addEventListener('submit',function(e){
+    e.preventDefault();
+    var phone=$('#modalPhone').value.trim(), err=$('#modalErr');
+    if(!/^09\d{9}$/.test(phone)){err.textContent='شماره موبایل باید ۱۱ رقم و با ۰۹ شروع شود.';err.style.display='block';return}
+    err.style.display='none';
+    startPayment(pendingPlan,phone,$('#modalSubmit'));
+  });
+
+  function startPayment(planId,phone,btn){
     var old=btn.textContent;btn.textContent='در حال اتصال به درگاه…';btn.disabled=true;
-    fetch('/api/payment/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({planId:planId,billing:billing})})
+    fetch('/api/payment/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({planId:planId,billing:billing,phone:phone})})
       .then(function(r){
         var ct=r.headers.get('content-type')||'';
         if(ct.indexOf('application/json')===-1){
@@ -437,7 +473,7 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
         window.location.href=r.body.paymentUrl;
       })
       .catch(function(err){
-        alert(err.message||'اتصال به درگاه پرداخت ناموفق بود. کمی بعد دوباره امتحان کن.');
+        var e=$('#modalErr');e.textContent=err.message||'اتصال به درگاه پرداخت ناموفق بود.';e.style.display='block';
         btn.textContent=old;btn.disabled=false;
       });
   }
