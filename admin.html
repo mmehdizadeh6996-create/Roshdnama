@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>پنل مدیریت | رشدینک</title>
+<link href="https://fonts.googleapis.com/css2?family=Lalezar&family=Vazirmatn:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{box-sizing:border-box;--bg:#f2f5fb;--sf:#fff;--sf2:#e9eefb;--ink:#0d1a3a;--mu:#56617f;--ln:#d9e0f0;--br:#2450ff;--gd:#0e9f6e;--wn:#d98a00;--bd:#d9443a;--sh:0 14px 34px -24px rgba(13,26,58,.4);--f:'Vazirmatn',Tahoma,sans-serif;--d:'Lalezar','Vazirmatn',Tahoma,sans-serif}
+@media(prefers-color-scheme:dark){:root{--bg:#081027;--sf:#101a38;--sf2:#16224a;--ink:#eaf0ff;--mu:#9aa8d0;--ln:#24325f;--br:#5b7bff;--gd:#34d399;--wn:#f5b73b;--bd:#ff7a70}}
+*{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.9 var(--f);padding-top:env(safe-area-inset-top,0px)}
+h1,h2,h3{font-family:var(--d);font-weight:400;margin:0}
+h2{font-size:1.4rem}h3{font-size:1.05rem}
+.mu{color:var(--mu)}
+.inp{width:100%;padding:10px 13px;border-radius:11px;border:1.5px solid var(--ln);background:var(--bg);min-height:44px;margin-top:6px}
+textarea.inp{resize:vertical;min-height:70px}
+.btn{display:inline-flex;align-items:center;justify-content:center;border:0;cursor:pointer;border-radius:11px;padding:9px 16px;font-weight:700;background:var(--br);color:#fff;min-height:42px}
+.btn.g{background:transparent;color:var(--ink);border:1.5px solid var(--ln)}
+.btn.sm{padding:6px 12px;min-height:34px;font-size:.85rem}
+.card{background:var(--sf);border:1px solid var(--ln);border-radius:18px;padding:18px;box-shadow:var(--sh);margin-bottom:14px}
+.top{position:sticky;top:0;background:var(--bg);z-index:10;display:flex;gap:8px;padding:14px clamp(12px,3vw,28px);border-bottom:1px solid var(--ln);align-items:center;flex-wrap:wrap}
+.top b{font-family:var(--d);font-size:1.3rem}
+.tabs{display:flex;gap:6px;overflow-x:auto}
+.tabs button{border:0;background:var(--sf2);padding:8px 14px;border-radius:99px;cursor:pointer;white-space:nowrap;color:var(--mu);font-weight:600}
+.tabs button.on{background:var(--br);color:#fff}
+main{padding:18px clamp(12px,3vw,28px) 60px;max-width:960px;margin:0 auto}
+.hide{display:none!important}
+.tag{font-size:.72rem;padding:2px 9px;border-radius:99px;font-weight:700;white-space:nowrap}
+.paid,.done{background:color-mix(in srgb,var(--gd) 16%,transparent);color:var(--gd)}
+.pending,.queued,.open,.in_progress{background:color-mix(in srgb,var(--wn) 16%,transparent);color:var(--wn)}
+.failed,.closed{background:color-mix(in srgb,var(--bd) 16%,transparent);color:var(--bd)}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;border-bottom:1px solid var(--ln);padding:10px 0}
+.row:last-child{border-bottom:0}
+.sel{padding:6px 8px;border-radius:8px;border:1.5px solid var(--ln);background:var(--bg)}
+#login{max-width:360px;margin:12vh auto;padding:0 16px}
+#toast{position:fixed;inset-inline:16px;bottom:20px;z-index:60;margin:auto;max-width:420px;padding:12px 16px;border-radius:14px;font-weight:700;text-align:center;display:none;color:#fff}
+.msg{padding:8px 12px;border-radius:12px;margin:6px 0;font-size:.9rem;max-width:85%;white-space:pre-wrap}
+.msg.user{background:var(--sf2)}
+.msg.support{background:color-mix(in srgb,var(--br) 14%,var(--sf));margin-inline-start:auto}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+<div id="login" class="hide">
+  <div class="card">
+    <h2>ورود ادمین</h2>
+    <input class="inp" id="pw" type="password" placeholder="رمز عبور">
+    <button class="btn" id="loginBtn" style="width:100%;margin-top:12px">ورود</button>
+  </div>
+</div>
+<div id="app" class="hide">
+  <div class="top"><b>پنل رشدینک</b>
+    <div class="tabs">
+      <button class="on" data-t="over">نمای کلی</button>
+      <button data-t="dlv">برنامه‌ی اجرا</button>
+      <button data-t="con">محتوا</button>
+      <button data-t="tik">تیکت‌ها</button>
+    </div>
+    <button class="btn g sm" style="margin-inline-start:auto" onclick="adminLogout()">خروج</button>
+  </div>
+  <main>
+    <section id="p-over"></section>
+    <section id="p-dlv" class="hide"></section>
+    <section id="p-con" class="hide"></section>
+    <section id="p-tik" class="hide"></section>
+  </main>
+</div>
+<script>
+var $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+var fa=n=>Number(n).toLocaleString('fa-IR');
+var esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+var dt=d=>new Date(d).toLocaleDateString('fa-IR');
+function toast(m,bad){var t=$('#toast');t.textContent=m;t.style.background=bad?'var(--bd)':'var(--gd)';t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',3500)}
+async function api(m,p,b){
+  try{var r=await fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});return{ok:r.ok,data:await r.json().catch(()=>({}))}}
+  catch(e){return{ok:false,data:{error:'اتصال برقرار نشد.'}}}
+}
+$('#loginBtn').onclick=async function(){
+  var r=await api('POST','/api/admin/login',{password:$('#pw').value});
+  if(!r.ok)return toast(r.data.error||'رمز اشتباه است.',1);
+  boot();
+};
+function adminLogout(){api('POST','/api/admin/logout').then(()=>location.reload())}
+
+var OVER=null,DLV=[],CON=[],TIK=[];
+async function boot(){
+  var m=await api('GET','/api/admin/me');
+  if(!m.ok){$('#login').classList.remove('hide');$('#app').classList.add('hide');return}
+  $('#login').classList.add('hide');$('#app').classList.remove('hide');
+  await loadAll();
+}
+async function loadAll(){
+  var a=await Promise.all([api('GET','/api/admin/overview'),api('GET','/api/admin/deliverables'),api('GET','/api/admin/content'),api('GET','/api/admin/tickets')]);
+  OVER=a[0].data;DLV=a[1].data||[];CON=a[2].data||[];TIK=a[3].data||[];
+  renderOver();renderDlv();renderCon();renderTik();
+}
+$$('.tabs button').forEach(b=>b.onclick=()=>{$$('.tabs button').forEach(x=>x.classList.toggle('on',x===b));$$('main section').forEach(s=>s.classList.toggle('hide',s.id!=='p-'+b.dataset.t))});
+
+function renderOver(){
+  $('#p-over').innerHTML='<div class="card"><h3>سفارش‌های اخیر</h3>'+(OVER.orders.length?OVER.orders.map(o=>
+    '<div class="row"><span>'+esc(o.phone)+' · '+esc(o.plan_name)+' ('+fa(o.cycle)+' ماهه)</span><span class="tag '+o.status+'">'+o.status+'</span></div>'
+  ).join(''):'<p class="mu">سفارشی ثبت نشده.</p>')+'</div>'+
+   '<div class="card"><b>'+fa(OVER.pendingDeliverables)+'</b> <span class="mu">آیتم تحویل‌نشده</span> · <b>'+fa(OVER.openTickets)+'</b> <span class="mu">تیکت باز</span></div>';
+}
+
+var DST={pending:'در انتظار',in_progress:'در حال انجام',done:'تحویل‌شده'};
+function renderDlv(){
+  if(!DLV.length){$('#p-dlv').innerHTML='<p class="mu">آیتمی نیست.</p>';return}
+  $('#p-dlv').innerHTML=DLV.map(d=>'<div class="card"><div class="row" style="border:0;padding:0"><div><b>'+esc(d.phone)+'</b><br>'+esc(d.title)+' <span class="mu">('+(d.item_type==='one_time'?'یک‌بار':'دوره '+fa(d.period_index))+')</span></div>'+
+    '<select class="sel" data-id="'+d.id+'" data-f="dlvstatus"><option value="pending"'+(d.status==='pending'?' selected':'')+'>در انتظار</option><option value="in_progress"'+(d.status==='in_progress'?' selected':'')+'>در حال انجام</option><option value="done"'+(d.status==='done'?' selected':'')+'>تحویل‌شده</option></select></div>'+
+    '<textarea class="inp" data-id="'+d.id+'" data-f="dlvresult" placeholder="توضیح یا نتیجه‌ی تحویل (اختیاری)">'+esc(d.result||'')+'</textarea>'+
+    '<button class="btn sm" data-id="'+d.id+'" data-f="dlvsave" style="margin-top:8px">ذخیره</button></div>').join('');
+}
+function renderCon(){
+  if(!CON.length){$('#p-con').innerHTML='<p class="mu">درخواستی نیست.</p>';return}
+  $('#p-con').innerHTML=CON.map(c=>'<div class="card"><div class="row" style="border:0;padding:0"><div><b>'+esc(c.phone)+'</b><br>'+esc(c.topic)+' <span class="mu">('+esc(c.keywords||'—')+')</span></div><span class="tag '+c.status+'">'+(c.status==='done'?'آماده':'در صف')+'</span></div>'+
+    '<textarea class="inp" data-id="'+c.id+'" data-f="conresult" placeholder="متن آماده‌شده">'+esc(c.result||'')+'</textarea>'+
+    '<button class="btn sm" data-id="'+c.id+'" data-f="consave" style="margin-top:8px">ثبت به‌عنوان آماده</button></div>').join('');
+}
+function renderTik(){
+  if(!TIK.length){$('#p-tik').innerHTML='<p class="mu">تیکتی نیست.</p>';return}
+  $('#p-tik').innerHTML=TIK.map(t=>'<div class="card"><div class="row" style="border:0;padding:0"><b>'+esc(t.phone)+' — '+esc(t.subject)+'</b><span class="tag '+t.status+'">'+t.status+'</span></div>'+
+    t.messages.map(m=>'<div class="msg '+m.sender+'">'+esc(m.body)+'</div>').join('')+
+    '<input class="inp" data-id="'+t.id+'" data-f="tikreply" placeholder="پاسخ شما…">'+
+    '<button class="btn sm" data-id="'+t.id+'" data-f="tiksend" style="margin-top:8px">ارسال پاسخ</button> '+
+    '<button class="btn g sm" data-id="'+t.id+'" data-f="tikclose" style="margin-top:8px">پاسخ و بستن تیکت</button></div>').join('');
+}
+
+document.addEventListener('click',async function(e){
+  var f=e.target.dataset.f;if(!f)return;
+  var id=e.target.dataset.id;
+  if(f==='dlvsave'){
+    var card=e.target.closest('.card');
+    var status=card.querySelector('[data-f=dlvstatus]').value, result=card.querySelector('[data-f=dlvresult]').value;
+    var r=await api('POST','/api/admin/deliverables/'+id,{status:status,result:result});
+    if(!r.ok)return toast(r.data.error||'ذخیره نشد.',1);toast('ذخیره شد.');loadAll();
+  }
+  if(f==='consave'){
+    var card=e.target.closest('.card');
+    var result=card.querySelector('[data-f=conresult]').value;
+    var r=await api('POST','/api/admin/content/'+id,{status:'done',result:result});
+    if(!r.ok)return toast(r.data.error||'ذخیره نشد.',1);toast('ذخیره شد.');loadAll();
+  }
+  if(f==='tiksend'||f==='tikclose'){
+    var card=e.target.closest('.card');
+    var body=card.querySelector('[data-f=tikreply]').value.trim();
+    if(!body)return toast('متن پاسخ را بنویس.',1);
+    var r=await api('POST','/api/admin/tickets/'+id+'/reply',{body:body,close:f==='tikclose'});
+    if(!r.ok)return toast(r.data.error||'ارسال نشد.',1);toast('ارسال شد.');loadAll();
+  }
+});
+
+boot();
+</script>
+</body>
+</html>
