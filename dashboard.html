@@ -42,7 +42,7 @@ main{padding:26px clamp(14px,3vw,34px) 40px;min-width:0}
 .big{font-family:var(--d);font-size:2.2rem;line-height:1.2}
 .tag{font-size:.75rem;padding:2px 10px;border-radius:99px;font-weight:700;white-space:nowrap}
 .paid,.done{background:color-mix(in srgb,var(--gd) 16%,transparent);color:var(--gd)}
-.pending,.queued,.open{background:color-mix(in srgb,var(--wn) 16%,transparent);color:var(--wn)}
+.pending,.queued,.open,.in_progress{background:color-mix(in srgb,var(--wn) 16%,transparent);color:var(--wn)}
 .failed{background:color-mix(in srgb,var(--bd) 16%,transparent);color:var(--bd)}
 table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{padding:10px 8px;text-align:right;border-bottom:1px solid var(--ln)}
 .tbl{overflow-x:auto}
@@ -85,6 +85,7 @@ summary{cursor:pointer;padding:12px 0;font-weight:700;display:flex;justify-conte
   <aside class="side">
     <div class="brand">رشدینک</div>
     <button class="nav on" data-t="home">🏠<span>نمای کلی</span></button>
+    <button class="nav" data-t="plan">🗓️<span>برنامه‌ی اجرا</span></button>
     <button class="nav" data-t="seo">📈<span>تحلیل سئو</span></button>
     <button class="nav" data-t="content">✍️<span>محتوا</span></button>
     <button class="nav" data-t="support">💬<span>پشتیبانی</span></button>
@@ -94,6 +95,7 @@ summary{cursor:pointer;padding:12px 0;font-weight:700;display:flex;justify-conte
   <main>
     <div class="top"><h2 id="title">نمای کلی</h2><span class="mu" id="who"></span></div>
     <section id="t-home"></section>
+    <section id="t-plan" class="hide"></section>
     <section id="t-seo" class="hide"></section>
     <section id="t-content" class="hide"></section>
     <section id="t-support" class="hide"></section>
@@ -107,8 +109,8 @@ var fa=n=>Number(n).toLocaleString('fa-IR');
 var esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 var dt=d=>new Date(d).toLocaleDateString('fa-IR');
 var ST={paid:'پرداخت‌شده',pending:'در انتظار',failed:'ناموفق',queued:'در صف تولید',done:'آماده',open:'باز'};
-var TITLES={home:'نمای کلی',seo:'تحلیل سئو',content:'درخواست محتوا',support:'پشتیبانی',account:'حساب من'};
-var DEMO=false,D=null,S=null,ANA=[],CON=[],TIK=[];
+var TITLES={home:'نمای کلی',plan:'برنامه‌ی اجرا',seo:'تحلیل سئو',content:'درخواست محتوا',support:'پشتیبانی',account:'حساب من'};
+var DEMO=false,D=null,S=null,ANA=[],CON=[],TIK=[],DLV=[];
 
 function toast(m,bad){var t=$('#toast');t.textContent=m;t.style.background=bad?'var(--bd)':'var(--gd)';t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',3800)}
 
@@ -123,7 +125,16 @@ function demoInit(){
      issues:[{title:'Serve images in next-gen formats'},{title:'Reduce unused JavaScript'},{title:'Eliminate render-blocking resources'}],created_at:new Date(n-(20-i*4)*d).toISOString()})).reverse(),
    con:[{id:3,topic:'راهنمای سئو فروشگاه اینترنتی',keywords:'سئو فروشگاه, رتبه گوگل',status:'queued',result:null,created_at:new Date(n-1*d).toISOString()},
         {id:2,topic:'چگونه سرعت سایت را افزایش دهیم؟',keywords:'سرعت سایت',status:'done',result:'نمونه‌ی متن آماده‌شده: سرعت بارگذاری یکی از مهم‌ترین عوامل رتبه در گوگل است…',created_at:new Date(n-6*d).toISOString()}],
-   tik:[{id:1,subject:'سوال درباره‌ی گزارش ماهانه',status:'open',created_at:new Date(n-2*d).toISOString(),messages:[{sender:'user',body:'گزارش این ماه کی آماده می‌شود؟',created_at:new Date(n-2*d).toISOString()},{sender:'support',body:'سلام! گزارش تا پایان هفته در همین داشبورد قرار می‌گیرد.',created_at:new Date(n-1*d).toISOString()}]}]};
+   tik:[{id:1,subject:'سوال درباره‌ی گزارش ماهانه',status:'open',created_at:new Date(n-2*d).toISOString(),messages:[{sender:'user',body:'گزارش این ماه کی آماده می‌شود؟',created_at:new Date(n-2*d).toISOString()},{sender:'support',body:'سلام! گزارش تا پایان هفته در همین داشبورد قرار می‌گیرد.',created_at:new Date(n-1*d).toISOString()}]}],
+   dlv:[
+     {id:1,title:'ممیزی کامل سئو فنی',item_type:'one_time',automation:'manual',period_index:1,status:'done',result:'فایل گزارش ممیزی برایتان ایمیل شد.',created_at:new Date(n-19*d).toISOString()},
+     {id:2,title:'بهبود سرعت و Core Web Vitals',item_type:'one_time',automation:'manual',period_index:1,status:'in_progress',result:null,created_at:new Date(n-19*d).toISOString()},
+     {id:3,title:'۸ محتوای تخصصی این ماه',item_type:'monthly',automation:'ai',period_index:1,status:'done',result:'۸ محتوا تحویل داده شد.',created_at:new Date(n-19*d).toISOString()},
+     {id:4,title:'۸ محتوای تخصصی این ماه',item_type:'monthly',automation:'ai',period_index:2,status:'pending',result:null,created_at:new Date(n-19*d).toISOString()},
+     {id:5,title:'گزارش عملکرد این ماه',item_type:'monthly',automation:'manual',period_index:1,status:'done',result:'رشد ۱۸٪ در ترافیک ارگانیک.',created_at:new Date(n-19*d).toISOString()},
+     {id:6,title:'جلسه‌ی استراتژی',item_type:'biweekly',automation:'manual',period_index:1,status:'done',result:null,created_at:new Date(n-19*d).toISOString()},
+     {id:7,title:'جلسه‌ی استراتژی',item_type:'biweekly',automation:'manual',period_index:2,status:'pending',result:null,created_at:new Date(n-19*d).toISOString()},
+   ]};
 }
 function demoApi(m,p,b){
   var ok=x=>({ok:true,status:200,data:x}),k=m+' '+p.replace(/\/\d+\//,'/:id/');
@@ -132,6 +143,7 @@ function demoApi(m,p,b){
     case 'GET /api/dashboard/analyses':return ok(D.ana);
     case 'GET /api/dashboard/content':return ok(D.con);
     case 'GET /api/dashboard/tickets':return ok(D.tik);
+    case 'GET /api/dashboard/plan':return ok(D.dlv);
     case 'POST /api/dashboard/profile':D.sum.site_url=b.site_url;return ok({ok:true});
     case 'POST /api/dashboard/analyses':var l=D.ana[0].scores,up=v=>Math.min(98,v+Math.ceil(Math.random()*4));
       D.ana.unshift({id:Date.now(),host:D.sum.site_url,scores:{performance:up(l.performance),seo:up(l.seo),accessibility:up(l.accessibility),bestPractices:up(l.bestPractices)},vitals:D.ana[0].vitals,issues:D.ana[0].issues,created_at:new Date().toISOString()});D.sum.usage.analyses++;return ok({});
@@ -172,8 +184,8 @@ async function start(){
   $('#login').classList.add('hide');$('#app').classList.remove('hide');await load();
 }
 async function load(){
-  var a=await Promise.all([api('GET','/api/dashboard/summary'),api('GET','/api/dashboard/analyses'),api('GET','/api/dashboard/content'),api('GET','/api/dashboard/tickets')]);
-  S=a[0].data;ANA=a[1].data||[];CON=a[2].data||[];TIK=a[3].data||[];
+  var a=await Promise.all([api('GET','/api/dashboard/summary'),api('GET','/api/dashboard/analyses'),api('GET','/api/dashboard/content'),api('GET','/api/dashboard/tickets'),api('GET','/api/dashboard/plan')]);
+  S=a[0].data;ANA=a[1].data||[];CON=a[2].data||[];TIK=a[3].data||[];DLV=a[4].data||[];
   $('#who').textContent=S.phone;render();
 }
 function tab(t){$$('.nav').forEach(b=>b.classList.toggle('on',b.dataset.t===t));$$('main section').forEach(s=>s.classList.toggle('hide',s.id!=='t-'+t));$('#title').textContent=TITLES[t]}
@@ -201,6 +213,20 @@ function render(){
    '<div class="card"><span class="mu">درخواست‌های باز پشتیبانی</span><div class="big">'+fa(TIK.filter(t=>t.status==='open').length)+'</div><span class="mu">'+fa(CON.filter(c=>c.status==='queued').length)+' محتوا در صف تولید</span></div></div>'+
    '<div class="grid g2" style="margin-top:16px"><div class="card"><h3>مصرف پلن در این ماه</h3>'+(pl?meter('محتوا',U.content,L.content)+meter('تحلیل سئو',U.analyses,L.analyses):'<p class="mu">با فعال شدن پلن، سهمیه‌ات اینجا نمایش داده می‌شود.</p>')+'</div>'+
    '<div class="card"><h3>روند امتیاز سئو</h3>'+chart(ANA)+'</div></div>';
+
+  /* برنامه‌ی اجرا */
+  var DST={pending:'در انتظار',in_progress:'در حال انجام',done:'تحویل‌شده'};
+  var AUT={ai:'خودکار (هوش مصنوعی)',manual:'دستی توسط تیم'};
+  if(!pl){$('#t-plan').innerHTML=lockBox()}
+  else if(!DLV.length){$('#t-plan').innerHTML='<div class="card"><p class="mu">برنامه‌ی اجرای پلنت در حال آماده‌سازی است.</p></div>'}
+  else{
+    var byMonth={};DLV.forEach(d=>{var k=d.item_type==='one_time'?'یک‌بار':(d.item_type==='biweekly'?'دو هفته '+fa(d.period_index):'ماه '+fa(d.period_index));(byMonth[k]=byMonth[k]||[]).push(d)});
+    var done=DLV.filter(d=>d.status==='done').length;
+    $('#t-plan').innerHTML='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3>پیشرفت کلی</h3><b>'+fa(done)+' از '+fa(DLV.length)+'</b></div><div class="bar"><i style="width:'+Math.round(done/DLV.length*100)+'%"></i></div></div>'+
+     Object.keys(byMonth).map(k=>'<div class="card" style="margin-top:16px"><h3>'+k+'</h3>'+byMonth[k].map(d=>
+       '<div class="li" style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div>'+esc(d.title)+'</div><span class="mu" style="font-size:.78rem">'+AUT[d.automation]+(d.result?'<br>'+esc(d.result):'')+'</span></div><span class="tag '+d.status+'">'+DST[d.status]+'</span></div>'
+     ).join('')+'</div>').join('');
+  }
 
   /* تحلیل سئو */
   var cats=[['performance','سرعت'],['seo','سئوی فنی'],['accessibility','دسترس‌پذیری'],['bestPractices','استانداردهای فنی']];
