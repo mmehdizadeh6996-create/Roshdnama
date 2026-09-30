@@ -17,6 +17,18 @@ const KAVENEGAR_API_KEY = process.env.KAVENEGAR_API_KEY || '';
 const KAVENEGAR_TEMPLATE = process.env.KAVENEGAR_TEMPLATE || 'otp';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const PSI_KEY = process.env.PSI_API_KEY || '';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+async function callClaude(prompt, maxTokens) {
+  if (!ANTHROPIC_API_KEY) throw new Error('NO_KEY');
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: maxTokens || 1200, messages: [{ role: 'user', content: prompt }] }),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data?.error?.message || 'خطای سرویس هوش مصنوعی');
+  return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+}
 
 const PLANS = [
   { id: 'start', name: 'شروع', price: 9800000 },
@@ -40,7 +52,7 @@ const PLAN_ITEMS = {
     { title: 'بهبود سرعت و Core Web Vitals', type: 'one_time', automation: 'manual' },
     { title: 'سئو محلی و ثبت گوگل مپ', type: 'one_time', automation: 'manual' },
     { title: '۸ محتوای تخصصی این ماه', type: 'monthly', automation: 'ai' },
-    { title: 'لینک‌سازی داخلی و خارجی هدفمند این ماه', type: 'monthly', automation: 'manual' },
+    { title: 'برنامه‌ی لینک‌سازی داخلی سایت این ماه', type: 'monthly', automation: 'ai' },
     { title: 'گزارش عملکرد این ماه', type: 'monthly', automation: 'manual' },
     { title: 'جلسه‌ی استراتژی', type: 'biweekly', automation: 'ai' },
   ],
@@ -48,7 +60,7 @@ const PLAN_ITEMS = {
     { title: 'ممیزی کامل سئو فنی', type: 'one_time', automation: 'manual' },
     { title: 'بهینه‌سازی نرخ تبدیل (CRO)', type: 'one_time', automation: 'manual' },
     { title: '۲۰ محتوا و صفحه‌ی فرود این ماه', type: 'monthly', automation: 'ai' },
-    { title: 'لینک‌سازی داخلی و خارجی هدفمند این ماه', type: 'monthly', automation: 'manual' },
+    { title: 'برنامه‌ی لینک‌سازی داخلی سایت این ماه', type: 'monthly', automation: 'ai' },
     { title: 'تحلیل رقبا این ماه', type: 'monthly', automation: 'ai' },
     { title: 'گزارش عملکرد این ماه', type: 'monthly', automation: 'manual' },
     { title: 'جلسه‌ی استراتژی', type: 'biweekly', automation: 'ai' },
@@ -248,7 +260,15 @@ app.post('/api/dashboard/content', requireAuth, async (req, res) => {
     const topic = String(req.body?.topic || '').trim(), keywords = String(req.body?.keywords || '').trim().slice(0, 255);
     if (topic.length < 3 || topic.length > 255) return res.status(400).json({ error: 'موضوع باید بین ۳ تا ۲۵۵ کاراکتر باشد.' });
     if (!(await guardPlan(req, res, 'content'))) return;
-    res.json((await pool.query('INSERT INTO content_requests(user_id, topic, keywords) VALUES($1,$2,$3) RETURNING id, topic, keywords, status, result, created_at', [req.session.uid, topic, keywords])).rows[0]);
+    const row = (await pool.query('INSERT INTO content_requests(user_id, topic, keywords) VALUES($1,$2,$3) RETURNING *', [req.session.uid, topic, keywords])).rows[0];
+    if (ANTHROPIC_API_KEY) {
+      try {
+        const text = await callClaude(`یک مقاله‌ی سئوشده و کامل به زبان فارسی درباره‌ی موضوع «${topic}» بنویس. کلمات کلیدی هدف: ${keywords || '—'}. مقاله باید حداقل ۵۰۰ کلمه، ساختارمند با زیرتیتر، طبیعی و آماده‌ی انتشار در وبلاگ باشد. فقط متن نهایی مقاله را بنویس، بدون توضیح اضافه.`, 2200);
+        const upd = await pool.query('UPDATE content_requests SET status=$1, result=$2 WHERE id=$3 RETURNING *', ['done', text, row.id]);
+        return res.json(upd.rows[0]);
+      } catch (e) { console.error('AI content error:', e.message); }
+    }
+    res.json(row);
   } catch (e) { fail(res, e); }
 });
 
@@ -314,6 +334,31 @@ app.post('/api/admin/deliverables/:id', requireAdmin, async (req, res) => {
     await pool.query('UPDATE deliverables SET status=$1, result=COALESCE($2, result), updated_at=now() WHERE id=$3', [status, result, req.params.id]);
     res.json({ ok: true });
   } catch (e) { fail(res, e); }
+});
+app.post('/api/admin/deliverables/:id/generate', requireAdmin, async (req, res) => {
+  try {
+    if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'کلید هوش مصنوعی هنوز تنظیم نشده است.' });
+    const d = (await pool.query('SELECT d.*, u.site_url FROM deliverables d JOIN users u ON u.id=d.user_id WHERE d.id=$1', [req.params.id])).rows[0];
+    if (!d) return res.status(404).json({ error: 'آیتم پیدا نشد.' });
+    if (d.automation !== 'ai') return res.status(400).json({ error: 'این آیتم خودکار نیست.' });
+    const site = d.site_url || 'سایت مشتری';
+    let prompt;
+    if (d.title.includes('محتوا')) {
+      const n = (d.title.match(/\d+/) || [])[0] || '5';
+      prompt = `برای سایت ${site}، ${n} موضوع مقاله‌ی سئوشده‌ی جذاب و متفاوت به فارسی پیشنهاد بده. برای هر موضوع یک عنوان و یک خط توضیح کوتاه بنویس. فقط لیست شماره‌گذاری‌شده را برگردان.`;
+    } else if (d.title.includes('لینک‌سازی داخلی')) {
+      prompt = `برای سایت ${site} یک برنامه‌ی لینک‌سازی داخلی این ماه به فارسی بنویس: چند پیشنهاد مشخص که کدام نوع صفحات باید به کدام صفحات لینک داخلی بدهند و چرا. مختصر و عملی، به‌صورت لیست.`;
+    } else if (d.title.includes('تحلیل رقبا')) {
+      prompt = `یک چارچوب تحلیل رقبا برای کسب‌وکاری با سایت ${site} به فارسی بنویس: چه معیارهایی (کلمات کلیدی، محتوا، بک‌لینک، سرعت) باید بررسی شود و چطور از روی آن‌ها نتیجه گرفت. چون به داده‌ی زنده‌ی رقبا دسترسی مستقیم نداری، این را به‌عنوان چارچوب و روش تحلیل ارائه بده، نه با اعداد ساختگی.`;
+    } else if (d.title.includes('استراتژی')) {
+      prompt = `یک گزارش استراتژی سئوی دو هفته‌ای برای سایت ${site} به فارسی بنویس: ۳ تا ۵ اقدام اولویت‌دار برای دو هفته‌ی آینده، با یک دلیل کوتاه برای هرکدام.`;
+    } else {
+      prompt = `یک گزارش کوتاه و عملی درباره‌ی «${d.title}» برای سایت ${site} به فارسی بنویس.`;
+    }
+    const text = await callClaude(prompt, 1500);
+    const upd = await pool.query('UPDATE deliverables SET status=$1, result=$2, updated_at=now() WHERE id=$3 RETURNING id, title, item_type, automation, period_index, status, result', ['done', text, d.id]);
+    res.json(upd.rows[0]);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'تولید با هوش مصنوعی ناموفق بود.', detail: e.message }); }
 });
 app.get('/api/admin/tickets', requireAdmin, async (req, res) => {
   try {
