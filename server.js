@@ -74,7 +74,7 @@ const cleanHost = raw => String(raw || '').trim().replace(/^https?:\/\//i, '').r
 const fail = (res, err) => { console.error(err); res.status(500).json({ error: 'خطای سرور.' }); };
 
 /* ---------- دیتابیس ---------- */
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : undefined });
 async function initDb() {
   if (!process.env.DATABASE_URL) return;
   await pool.query(`
@@ -245,7 +245,7 @@ app.post('/api/dashboard/analyses', requireAuth, async (req, res) => {
     let host = cleanHost(req.body?.domain);
     if (!host) host = (await pool.query('SELECT site_url FROM users WHERE id=$1', [req.session.uid])).rows[0].site_url || '';
     if (!host || !isValidHost(host)) return res.status(400).json({ error: 'اول آدرس سایتت را در بخش حساب ثبت کن.' });
-    const r = await runPSI(`https://${host}`, 'mobile');
+    const r = await getPSI(`https://${host}`, 'mobile');
     const ins = await pool.query('INSERT INTO analyses(user_id, host, scores, vitals, issues) VALUES($1,$2,$3,$4,$5) RETURNING id, host, scores, vitals, issues, created_at',
       [req.session.uid, host, JSON.stringify(r.scores), JSON.stringify(r.vitals), JSON.stringify(r.topIssues)]);
     res.json(ins.rows[0]);
@@ -475,6 +475,28 @@ async function runPSI(url, strategy) {
       .sort((a, b) => (b.details?.overallSavingsMs || 0) - (a.details?.overallSavingsMs || 0)).slice(0, 5).map(a => ({ title: a.title, description: a.description })),
   };
 }
+// وقتی این سرور روی میزبانی‌ای اجرا می‌شود که گوگل IP آن را مسدود می‌کند (مثلاً سرور داخل ایران)،
+// PSI_PROXY_URL را به آدرس یک نمونه‌ی دیگر از همین سرویس که مشکلی با گوگل ندارد (مثلاً Render) تنظیم کن
+// تا این سرور به‌جای تماس مستقیم با گوگل، از آن سرور واسطه کمک بگیرد.
+const PSI_PROXY_URL = process.env.PSI_PROXY_URL || '';
+const PSI_RELAY_KEY = process.env.PSI_RELAY_KEY || '';
+async function getPSI(url, strategy) {
+  if (!PSI_PROXY_URL) return runPSI(url, strategy);
+  const r = await fetch(`${PSI_PROXY_URL}/api/psi-relay?url=${encodeURIComponent(url)}&strategy=${strategy}`, {
+    headers: PSI_RELAY_KEY ? { 'x-relay-key': PSI_RELAY_KEY } : {},
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data?.error || `خطای واسطه (${r.status})`);
+  return data;
+}
+app.get('/api/psi-relay', async (req, res) => {
+  try {
+    if (PSI_RELAY_KEY && req.headers['x-relay-key'] !== PSI_RELAY_KEY) return res.status(401).json({ error: 'دسترسی مجاز نیست.' });
+    const url = String(req.query.url || ''), strategy = req.query.strategy === 'desktop' ? 'desktop' : 'mobile';
+    if (!url) return res.status(400).json({ error: 'آدرس ارسال نشده است.' });
+    res.json(await runPSI(url, strategy));
+  } catch (err) { console.error(err); res.status(502).json({ error: String(err.message || err) }); }
+});
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.post('/api/analyze', async (req, res) => {
   try {
@@ -484,7 +506,7 @@ app.post('/api/analyze', async (req, res) => {
     const host = raw.replace(/^https?:\/\//i, '').replace(/^www\./i, '').split(/[\/?#]/)[0];
     if (!isValidHost(host)) return res.status(400).json({ error: 'آدرس سایت معتبر نیست.' });
     const target = hasProtocol ? raw : `https://${host}`;
-    const [mobile, desktop] = await Promise.all([runPSI(target, 'mobile'), runPSI(target, 'desktop')]);
+    const [mobile, desktop] = await Promise.all([getPSI(target, 'mobile'), getPSI(target, 'desktop')]);
     res.json({ host, target, mobile, desktop, fetchedAt: new Date().toISOString() });
   } catch (err) {
     console.error(err);
