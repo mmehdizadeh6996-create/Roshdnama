@@ -480,14 +480,29 @@ async function runPSI(url, strategy) {
 // تا این سرور به‌جای تماس مستقیم با گوگل، از آن سرور واسطه کمک بگیرد.
 const PSI_PROXY_URL = process.env.PSI_PROXY_URL || '';
 const PSI_RELAY_KEY = process.env.PSI_RELAY_KEY || '';
-async function getPSI(url, strategy) {
-  if (!PSI_PROXY_URL) return runPSI(url, strategy);
+async function fetchRelayOnce(url, strategy, timeoutMs) {
   const r = await fetch(`${PSI_PROXY_URL}/api/psi-relay?url=${encodeURIComponent(url)}&strategy=${strategy}`, {
     headers: PSI_RELAY_KEY ? { 'x-relay-key': PSI_RELAY_KEY } : {},
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const data = await r.json();
   if (!r.ok) throw new Error(data?.error || `خطای واسطه (${r.status})`);
   return data;
+}
+async function getPSI(url, strategy) {
+  if (!PSI_PROXY_URL) return runPSI(url, strategy);
+  // اتصال بین‌المللی گاهی کند است؛ با تایم‌اوت طولانی‌تر و یک تلاش مجدد امتحان می‌کنیم
+  try {
+    return await fetchRelayOnce(url, strategy, 45000);
+  } catch (e1) {
+    console.error('PSI relay attempt 1 failed:', e1.message);
+    try {
+      return await fetchRelayOnce(url, strategy, 45000);
+    } catch (e2) {
+      console.error('PSI relay attempt 2 failed:', e2.message);
+      throw new Error('اتصال به سرویس واسطه‌ی تحلیل برقرار نشد (شبکه ناپایدار است). کمی بعد دوباره امتحان کن.');
+    }
+  }
 }
 app.get('/api/psi-relay', async (req, res) => {
   try {
