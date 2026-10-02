@@ -232,9 +232,8 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
       <div class="hint" id="hint">بدون ثبت‌نام و بدون نیاز به دسترسی به سایت.</div>
       <div class="quick">
         <span class="muted">نمونه:</span>
-        <button class="chip" data-d="digishop.ir" type="button">digishop.ir</button>
-        <button class="chip" data-d="https://tehran-dental.com" type="button">tehran-dental.com</button>
-        <button class="chip" data-d="noorcafe.ir" type="button">noorcafe.ir</button>
+        <button class="chip" data-d="successplus.ir" type="button">successplus.ir</button>
+        <button class="chip" data-d="Infinitesignals.trade" type="button">Infinitesignals.trade</button>
         <span class="muted">یا</span>
         <a href="#plans" class="chip" style="text-decoration:none">مستقیم پلن انتخاب کن</a>
       </div>
@@ -550,7 +549,7 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
       .then(function(res){return res.json().then(function(j){return {ok:res.ok,body:j}})})
       .then(function(r){
         clearInterval(t);bar.style.width='100%';
-        if(!r.ok){throw new Error(r.body&&r.body.error?r.body.error:'خطای ناشناخته')}
+        if(!r.ok){throw new Error((r.body&&r.body.error?r.body.error:'خطای ناشناخته')+(r.body&&r.body.detail?(' — جزئیات: '+r.body.detail):''))}
         setTimeout(function(){show(d,r.body)},300);
       })
       .catch(function(err){
