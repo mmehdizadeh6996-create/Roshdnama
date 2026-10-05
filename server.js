@@ -104,6 +104,12 @@ async function initDb() {
       id SERIAL PRIMARY KEY, ticket_id INTEGER REFERENCES tickets(id), sender VARCHAR(10) NOT NULL,
       body TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS discounts (
+      id SERIAL PRIMARY KEY, code VARCHAR(30) UNIQUE NOT NULL, percent INTEGER NOT NULL,
+      plan_id VARCHAR(20), active BOOLEAN DEFAULT true, expires_at TIMESTAMPTZ NOT NULL,
+      max_uses INTEGER, used_count INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT now()
+    );
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_code VARCHAR(30);
     CREATE TABLE IF NOT EXISTS deliverables (
       id SERIAL PRIMARY KEY, order_id INTEGER REFERENCES orders(id), user_id INTEGER REFERENCES users(id),
       title VARCHAR(255) NOT NULL, item_type VARCHAR(20) NOT NULL, automation VARCHAR(10) NOT NULL,
@@ -393,24 +399,83 @@ app.post('/api/admin/content/:id', requireAdmin, async (req, res) => {
   } catch (e) { fail(res, e); }
 });
 
+/* ---------- کدهای تخفیف ---------- */
+async function findValidDiscount(code, planId) {
+  if (!code) return null;
+  const r = await pool.query(
+    `SELECT * FROM discounts WHERE code=$1 AND active=true AND expires_at > now() AND (max_uses IS NULL OR used_count < max_uses)`,
+    [String(code).trim().toUpperCase()]
+  );
+  const d = r.rows[0];
+  if (!d) return null;
+  if (d.plan_id && d.plan_id !== planId) return null;
+  return d;
+}
+app.get('/api/discounts/active', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT code, percent, plan_id, expires_at FROM discounts
+       WHERE active=true AND expires_at > now() AND (max_uses IS NULL OR used_count < max_uses)
+       ORDER BY expires_at ASC LIMIT 1`
+    );
+    res.json(r.rows[0] || null);
+  } catch (e) { fail(res, e); }
+});
+app.get('/api/admin/discounts', requireAdmin, async (req, res) => {
+  try { res.json((await pool.query('SELECT * FROM discounts ORDER BY created_at DESC')).rows); } catch (e) { fail(res, e); }
+});
+app.post('/api/admin/discounts', requireAdmin, async (req, res) => {
+  try {
+    const code = String(req.body?.code || '').trim().toUpperCase();
+    const percent = Number(req.body?.percent);
+    const planId = req.body?.planId || null;
+    const expiresAt = req.body?.expiresAt;
+    const maxUses = req.body?.maxUses ? Number(req.body.maxUses) : null;
+    if (!/^[A-Z0-9_-]{3,30}$/.test(code)) return res.status(400).json({ error: 'کد باید ۳ تا ۳۰ حرف انگلیسی بزرگ یا عدد باشد.' });
+    if (!(percent > 0 && percent <= 90)) return res.status(400).json({ error: 'درصد تخفیف باید بین ۱ تا ۹۰ باشد.' });
+    if (!expiresAt) return res.status(400).json({ error: 'تاریخ و ساعت انقضا را مشخص کن.' });
+    if (planId && !PLANS.find(p => p.id === planId)) return res.status(400).json({ error: 'پلن نامعتبر است.' });
+    const row = (await pool.query(
+      'INSERT INTO discounts(code, percent, plan_id, expires_at, max_uses) VALUES($1,$2,$3,$4,$5) RETURNING *',
+      [code, percent, planId, expiresAt, maxUses]
+    )).rows[0];
+    res.json(row);
+  } catch (e) {
+    if (String(e.message || '').includes('duplicate')) return res.status(400).json({ error: 'این کد قبلاً ثبت شده است.' });
+    fail(res, e);
+  }
+});
+app.post('/api/admin/discounts/:id', requireAdmin, async (req, res) => {
+  try { await pool.query('UPDATE discounts SET active=$1 WHERE id=$2', [!!req.body?.active, req.params.id]); res.json({ ok: true }); } catch (e) { fail(res, e); }
+});
+app.delete('/api/admin/discounts/:id', requireAdmin, async (req, res) => {
+  try { await pool.query('DELETE FROM discounts WHERE id=$1', [req.params.id]); res.json({ ok: true }); } catch (e) { fail(res, e); }
+});
+
 /* ---------- پرداخت (زیبال) ---------- */
 app.post('/api/payment/request', async (req, res) => {
   try {
     if (!ZIBAL_MERCHANT) return res.status(500).json({ error: 'درگاه پرداخت هنوز تنظیم نشده است.' });
-    const { planId, billing, phone } = req.body || {};
+    const { planId, billing, phone, discountCode } = req.body || {};
     if (!isValidPhone(phone)) return res.status(400).json({ error: 'شماره موبایل معتبر نیست.' });
     const plan = PLANS.find(p => p.id === planId);
     if (!plan) return res.status(400).json({ error: 'پلن نامعتبر است.' });
     const cycle = Number(billing) === 3 ? 3 : 1;
     const monthly = cycle === 3 ? Math.round((plan.price * 0.85) / 1000) * 1000 : plan.price;
-    const amountToman = monthly * cycle;
+    let amountToman = monthly * cycle;
+    let appliedDiscount = null;
+    if (discountCode) {
+      appliedDiscount = await findValidDiscount(discountCode, plan.id);
+      if (appliedDiscount) amountToman = Math.round((amountToman * (1 - appliedDiscount.percent / 100)) / 1000) * 1000;
+    }
     const amountRial = amountToman * 10;
 
     const user = await findOrCreateUser(String(phone).trim());
     const orderRow = await pool.query(
-      'INSERT INTO orders(user_id, plan_id, plan_name, cycle, amount_toman, status) VALUES($1,$2,$3,$4,$5,$6) RETURNING id',
-      [user.id, plan.id, plan.name, cycle, amountToman, 'pending']
+      'INSERT INTO orders(user_id, plan_id, plan_name, cycle, amount_toman, status, discount_code) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+      [user.id, plan.id, plan.name, cycle, amountToman, 'pending', appliedDiscount ? appliedDiscount.code : null]
     );
+    if (appliedDiscount) await pool.query('UPDATE discounts SET used_count = used_count + 1 WHERE id=$1', [appliedDiscount.id]);
     const orderId = String(orderRow.rows[0].id);
     const callbackUrl = `${baseUrl(req)}/api/payment/callback`;
 
