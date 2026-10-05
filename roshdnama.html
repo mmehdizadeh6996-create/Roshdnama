@@ -155,6 +155,26 @@ nav.links a:hover{color:var(--ink)}
 .plan li{display:flex;gap:10px;font-size:.95rem}
 .plan li::before{content:"✓";flex:none;width:22px;height:22px;border-radius:50%;background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good);display:grid;place-items:center;font-size:.8rem;font-weight:700;margin-top:3px}
 .plan.pop li::before{background:rgba(255,255,255,.2);color:#fff}
+.plan .strike{color:var(--muted);text-decoration:line-through;font-size:1.1rem;font-weight:500;margin-inline-start:8px}
+.plan.pop .strike{color:rgba(255,255,255,.65)}
+
+.discount-banner{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
+  background:linear-gradient(90deg,var(--brand),#5b3dff);color:#fff;border-radius:22px;padding:18px 24px;margin-bottom:26px;
+  box-shadow:0 16px 36px -18px rgba(36,80,255,.55);position:relative;overflow:hidden}
+.discount-banner.hide{display:none}
+.db-left{display:flex;align-items:center;gap:12px}
+.db-flame{font-size:1.8rem;animation:dbPulse 1.6s ease-in-out infinite}
+@keyframes dbPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
+.db-left b{font-family:var(--display);font-size:1.3rem;font-weight:400;display:block}
+.db-left #dbCode{background:var(--signal);color:var(--signal-ink);padding:1px 10px;border-radius:8px;font-family:var(--font);font-weight:700;letter-spacing:.5px}
+.db-left span:not(#dbCode){opacity:.9;font-size:.92rem}
+.db-timer{display:flex;align-items:center;gap:6px}
+.db-unit{background:rgba(255,255,255,.16);border-radius:12px;padding:6px 10px;min-width:48px;text-align:center}
+.db-unit b{display:block;font-family:var(--display);font-size:1.3rem;line-height:1.1}
+.db-unit span{display:block;font-size:.68rem;opacity:.85;margin-top:1px}
+.db-colon{opacity:.7;font-weight:700}
+@media(max-width:560px){.discount-banner{padding:14px 16px}.db-left b{font-size:1.1rem}.db-unit{min-width:40px;padding:5px 7px}.db-unit b{font-size:1.05rem}}
+@media(prefers-reduced-motion:reduce){.db-flame{animation:none}}
 
 /* roi */
 .roi{display:grid;grid-template-columns:1fr 1fr;gap:24px}
@@ -282,7 +302,7 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
       </div>
       <div class="rec">
         <div><h3 id="recTitle"></h3><p id="recWhy" style="opacity:.9;margin-top:4px"></p></div>
-        <a class="btn" href="#contact" id="recBtn">همین پلن را می‌خواهم</a>
+        <a class="btn" href="#plans" id="recBtn">همین پلن را می‌خواهم</a>
       </div>
       <p class="note">این نتیجه یک تحلیل اولیه و نمونه است و بر اساس آدرس واردشده برآورد می‌شود، نه بررسی زنده‌ی سایت. گزارش دقیق را کارشناس ما پس از بررسی واقعی سایتت تحویل می‌دهد.</p>
     </div>
@@ -291,6 +311,21 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
 
 <section id="plans">
   <div class="wrap">
+    <div id="discountBanner" class="discount-banner hide">
+      <div class="db-left">
+        <span class="db-flame">🔥</span>
+        <div>
+          <b>کد تخفیف <span id="dbCode"></span></b>
+          <span id="dbPercent"></span>
+        </div>
+      </div>
+      <div class="db-timer" id="dbTimer" aria-live="polite">
+        <div class="db-unit"><b id="dbD">۰۰</b><span>روز</span></div><span class="db-colon">:</span>
+        <div class="db-unit"><b id="dbH">۰۰</b><span>ساعت</span></div><span class="db-colon">:</span>
+        <div class="db-unit"><b id="dbM">۰۰</b><span>دقیقه</span></div><span class="db-colon">:</span>
+        <div class="db-unit"><b id="dbS">۰۰</b><span>ثانیه</span></div>
+      </div>
+    </div>
     <div class="sec-head">
       <div>
         <h2>سه پلن، سه سطح از رشد</h2>
@@ -421,15 +456,25 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
     {id:'growth',name:'رشد',tag:'محبوب‌ترین انتخاب',price:24500000,uplift:.9,pop:true,feat:['همه‌ی امکانات پلن شروع','۸ محتوای تخصصی در ماه','لینک‌سازی داخلی و خارجی هدفمند','بهبود سرعت و Core Web Vitals','سئو محلی و گوگل مپ','جلسه‌ی استراتژی هر دو هفته']},
     {id:'scale',name:'تسلط',tag:'برای رهبری بازار',price:59000000,uplift:1.8,feat:['همه‌ی امکانات پلن رشد','تیم اختصاصی سئو و محتوا','۲۰ محتوا و طراحی صفحات فرود','بهینه‌سازی نرخ تبدیل (CRO)','تحلیل رقبا و داشبورد زنده','مشاور رشد اختصاصی با پاسخ همان‌روز']}
   ];
-  var billing=1, picked=null, roiPlan=1;
-  function priceOf(p){return Math.round(p.price*(billing===3?.85:1)/1000)*1000}
+  var billing=1, picked=null, roiPlan=1, DISCOUNT=null, dbTimerInt=null;
+  function basePriceOf(p){return Math.round(p.price*(billing===3?.85:1)/1000)*1000}
+  function discountAppliesTo(p){return DISCOUNT && (!DISCOUNT.plan_id || DISCOUNT.plan_id===p.id)}
+  function priceOf(p){
+    var base=basePriceOf(p);
+    if(discountAppliesTo(p)) return Math.round(base*(1-DISCOUNT.percent/100)/1000)*1000;
+    return base;
+  }
   function renderPlans(){
     $('#plans-grid').innerHTML=PLANS.map(function(p,i){
       var badge=p.pop?'<span class="badge">پیشنهاد ما</span>':'';
       if(picked===p.id) badge='<span class="badge">پیشنهاد تحلیل تو</span>';
+      var disc=discountAppliesTo(p);
+      var priceHtml=disc
+        ? '<span class="strike">'+fa(basePriceOf(p))+'</span>'+fa(priceOf(p))
+        : fa(priceOf(p));
       return '<article class="plan'+(p.pop?' pop':'')+(picked===p.id?' picked':'')+'">'+badge+
         '<h3>'+p.name+'</h3><p class="muted">'+p.tag+'</p>'+
-        '<div class="price">'+fa(priceOf(p))+'</div><div class="per">تومان در ماه'+(billing===3?'، پرداخت سه‌ماهه':'')+'</div>'+
+        '<div class="price">'+priceHtml+'</div><div class="per">تومان در ماه'+(billing===3?'، پرداخت سه‌ماهه':'')+(disc?' · با کد '+DISCOUNT.code:'')+'</div>'+
         '<ul>'+p.feat.map(function(f){return '<li>'+f+'</li>'}).join('')+'</ul>'+
         '<button type="button" class="btn'+(p.pop?'':' ghost')+' block" data-plan="'+p.id+'">خرید و پرداخت پلن '+p.name+'</button></article>';
     }).join('');
@@ -466,7 +511,7 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
 
   function startPayment(planId,phone,btn){
     var old=btn.textContent;btn.textContent='در حال اتصال به درگاه…';btn.disabled=true;
-    fetch('/api/payment/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({planId:planId,billing:billing,phone:phone})})
+    fetch('/api/payment/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({planId:planId,billing:billing,phone:phone,discountCode:DISCOUNT?DISCOUNT.code:undefined})})
       .then(function(r){
         var ct=r.headers.get('content-type')||'';
         if(ct.indexOf('application/json')===-1){
@@ -636,7 +681,41 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
     ok.textContent=n+' عزیز، درخواستت ثبت شد. مشاور ما در همان روز کاری با تو تماس می‌گیرد. (این فرم در نسخه‌ی نمونه فقط نمایشی است.)';
   });
 
+  /* ---- کد تخفیف فعال + تایمر ---- */
+  function loadDiscount(){
+    fetch('/api/discounts/active').then(function(r){return r.ok?r.json():null}).then(function(d){
+      if(!d) return;
+      DISCOUNT=d;
+      $('#dbCode').textContent=d.code;
+      $('#dbPercent').textContent=' — '+fa(d.percent)+'٪ تخفیف ویژه';
+      $('#discountBanner').classList.remove('hide');
+      renderPlans();
+      startDbTimer(new Date(d.expires_at).getTime());
+    }).catch(function(){});
+  }
+  function startDbTimer(endTime){
+    var digits=['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+    var faPad=function(n){n=String(n<0?0:n);if(n.length<2)n='0'+n;return n.split('').map(function(c){return digits[+c]||c}).join('')};
+    function tick(){
+      var left=endTime-Date.now();
+      if(left<=0){
+        clearInterval(dbTimerInt);
+        $('#discountBanner').classList.add('hide');
+        DISCOUNT=null;renderPlans();
+        return;
+      }
+      var s=Math.floor(left/1000);
+      var d=Math.floor(s/86400);s-=d*86400;
+      var h=Math.floor(s/3600);s-=h*3600;
+      var m=Math.floor(s/60);s-=m*60;
+      $('#dbD').textContent=faPad(d);$('#dbH').textContent=faPad(h);$('#dbM').textContent=faPad(m);$('#dbS').textContent=faPad(s);
+    }
+    tick();
+    dbTimerInt=setInterval(tick,1000);
+  }
+
   renderPlans();
+  loadDiscount();
 })();
 </script>
 </body>
