@@ -56,6 +56,7 @@ main{padding:18px clamp(12px,3vw,28px) 60px;max-width:960px;margin:0 auto}
       <button data-t="dlv">برنامه‌ی اجرا</button>
       <button data-t="con">محتوا</button>
       <button data-t="tik">تیکت‌ها</button>
+      <button data-t="dis">کد تخفیف</button>
     </div>
     <button class="btn g sm" style="margin-inline-start:auto" onclick="adminLogout()">خروج</button>
   </div>
@@ -64,6 +65,7 @@ main{padding:18px clamp(12px,3vw,28px) 60px;max-width:960px;margin:0 auto}
     <section id="p-dlv" class="hide"></section>
     <section id="p-con" class="hide"></section>
     <section id="p-tik" class="hide"></section>
+    <section id="p-dis" class="hide"></section>
   </main>
 </div>
 <script>
@@ -83,7 +85,8 @@ $('#loginBtn').onclick=async function(){
 };
 function adminLogout(){api('POST','/api/admin/logout').then(()=>location.reload())}
 
-var OVER=null,DLV=[],CON=[],TIK=[];
+var OVER=null,DLV=[],CON=[],TIK=[],DIS=[];
+var PLAN_NAMES={start:'شروع',growth:'رشد',scale:'تسلط'};
 async function boot(){
   var m=await api('GET','/api/admin/me');
   if(!m.ok){$('#login').classList.remove('hide');$('#app').classList.add('hide');return}
@@ -91,9 +94,9 @@ async function boot(){
   await loadAll();
 }
 async function loadAll(){
-  var a=await Promise.all([api('GET','/api/admin/overview'),api('GET','/api/admin/deliverables'),api('GET','/api/admin/content'),api('GET','/api/admin/tickets')]);
-  OVER=a[0].data;DLV=a[1].data||[];CON=a[2].data||[];TIK=a[3].data||[];
-  renderOver();renderDlv();renderCon();renderTik();
+  var a=await Promise.all([api('GET','/api/admin/overview'),api('GET','/api/admin/deliverables'),api('GET','/api/admin/content'),api('GET','/api/admin/tickets'),api('GET','/api/admin/discounts')]);
+  OVER=a[0].data;DLV=a[1].data||[];CON=a[2].data||[];TIK=a[3].data||[];DIS=a[4].data||[];
+  renderOver();renderDlv();renderCon();renderTik();renderDis();
 }
 $$('.tabs button').forEach(b=>b.onclick=()=>{$$('.tabs button').forEach(x=>x.classList.toggle('on',x===b));$$('main section').forEach(s=>s.classList.toggle('hide',s.id!=='p-'+b.dataset.t))});
 
@@ -129,6 +132,29 @@ function renderTik(){
     '<button class="btn g sm" data-id="'+t.id+'" data-f="tikclose" style="margin-top:8px">پاسخ و بستن تیکت</button></div>').join('');
 }
 
+function renderDis(){
+  var opts='<option value="">همه‌ی پلن‌ها</option>'+Object.keys(PLAN_NAMES).map(k=>'<option value="'+k+'">'+PLAN_NAMES[k]+'</option>').join('');
+  $('#p-dis').innerHTML='<div class="card"><h3>کد تخفیف جدید</h3>'+
+    '<input class="inp" data-dis="code" placeholder="کد (مثلاً SUMMER20)" maxlength="30" style="direction:ltr;text-align:right">'+
+    '<input class="inp" data-dis="percent" type="number" min="1" max="90" placeholder="درصد تخفیف (مثلاً ۲۰)">'+
+    '<select class="inp" data-dis="planId">'+opts+'</select>'+
+    '<span class="mu" style="display:block;margin-top:8px">تاریخ و ساعت پایان</span>'+
+    '<input class="inp" data-dis="expiresAt" type="datetime-local">'+
+    '<input class="inp" data-dis="maxUses" type="number" min="1" placeholder="حداکثر تعداد استفاده (اختیاری)">'+
+    '<button type="button" class="btn" data-f="newdis" style="width:100%;margin-top:10px">ساخت کد تخفیف</button></div>'+
+    '<div class="card" style="margin-top:14px"><h3>کدهای تخفیف</h3>'+(DIS.length?DIS.map(function(d){
+      var expired=new Date(d.expires_at)<=new Date();
+      var st=!d.active?'closed':(expired?'closed':'open');
+      var stLabel=!d.active?'غیرفعال':(expired?'منقضی':'فعال');
+      return '<div class="row"><div><b style="direction:ltr;display:inline-block">'+esc(d.code)+'</b> — '+fa(d.percent)+'٪'+
+        (d.plan_id?' · فقط پلن '+(PLAN_NAMES[d.plan_id]||d.plan_id):' · همه‌ی پلن‌ها')+
+        '<br><span class="mu" style="font-size:.78rem">تا '+dt(d.expires_at)+' · مصرف‌شده: '+fa(d.used_count)+(d.max_uses?(' از '+fa(d.max_uses)):'')+'</span></div>'+
+        '<div style="display:flex;gap:6px;align-items:center"><span class="tag '+st+'">'+stLabel+'</span>'+
+        '<button class="btn g sm" data-id="'+d.id+'" data-f="distoggle" data-active="'+(d.active?0:1)+'">'+(d.active?'غیرفعال کن':'فعال کن')+'</button>'+
+        '<button class="btn g sm" data-id="'+d.id+'" data-f="disdel">حذف</button></div></div>';
+    }).join(''):'<p class="mu">هنوز کد تخفیفی نساختی.</p>')+'</div>';
+}
+
 document.addEventListener('click',async function(e){
   var f=e.target.dataset.f;if(!f)return;
   var id=e.target.dataset.id;
@@ -149,6 +175,23 @@ document.addEventListener('click',async function(e){
     var result=card.querySelector('[data-f=conresult]').value;
     var r=await api('POST','/api/admin/content/'+id,{status:'done',result:result});
     if(!r.ok)return toast(r.data.error||'ذخیره نشد.',1);toast('ذخیره شد.');loadAll();
+  }
+  if(f==='newdis'){
+    var card=e.target.closest('.card');
+    var g=k=>card.querySelector('[data-dis='+k+']').value.trim();
+    var body={code:g('code'),percent:Number(g('percent')),planId:g('planId')||null,expiresAt:g('expiresAt')?new Date(g('expiresAt')).toISOString():null,maxUses:g('maxUses')?Number(g('maxUses')):null};
+    if(!body.code||!body.percent||!body.expiresAt)return toast('کد، درصد و تاریخ پایان را کامل کن.',1);
+    var r=await api('POST','/api/admin/discounts',body);
+    if(!r.ok)return toast(r.data.error||'ساخته نشد.',1);toast('کد تخفیف ساخته شد.');loadAll();
+  }
+  if(f==='distoggle'){
+    var r=await api('POST','/api/admin/discounts/'+id,{active:e.target.dataset.active==='1'});
+    if(!r.ok)return toast(r.data.error||'انجام نشد.',1);loadAll();
+  }
+  if(f==='disdel'){
+    if(!confirm('این کد تخفیف حذف شود؟'))return;
+    var r=await api('DELETE','/api/admin/discounts/'+id);
+    if(!r.ok)return toast(r.data.error||'حذف نشد.',1);toast('حذف شد.');loadAll();
   }
   if(f==='tiksend'||f==='tikclose'){
     var card=e.target.closest('.card');
