@@ -595,6 +595,7 @@ app.post('/api/analyze', async (req, res) => {
 });
 
 /* ---------- سرو کردن فایل‌های استاتیک سایت ---------- */
+app.get('/37110475.txt', (req, res) => res.type('text/plain').send('')); // تایید مالکیت دامنه برای ای‌نماد
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'roshdnama.html')));
 app.use(express.static(__dirname, { index: false }));
 
