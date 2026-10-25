@@ -457,9 +457,9 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
     {id:'growth',name:'رشد',tag:'محبوب‌ترین انتخاب',price:24500000,uplift:.9,pop:true,feat:['همه‌ی امکانات پلن شروع','۸ محتوای تخصصی در ماه','لینک‌سازی داخلی و خارجی هدفمند','بهبود سرعت و Core Web Vitals','سئو محلی و گوگل مپ','جلسه‌ی استراتژی هر دو هفته']},
     {id:'scale',name:'تسلط',tag:'برای رهبری بازار',price:59000000,uplift:1.8,feat:['همه‌ی امکانات پلن رشد','تیم اختصاصی سئو و محتوا','۲۰ محتوا و طراحی صفحات فرود','بهینه‌سازی نرخ تبدیل (CRO)','تحلیل رقبا و داشبورد زنده','مشاور رشد اختصاصی با پاسخ همان‌روز']}
   ];
-  var billing=1, picked=null, roiPlan=1, DISCOUNT=null, dbTimerInt=null;
-  function basePriceOf(p){return Math.round(p.price*(billing===3?.85:1)/1000)*1000}
-  function discountAppliesTo(p){return DISCOUNT && (!DISCOUNT.plan_id || DISCOUNT.plan_id===p.id)}
+  var billing=1, picked=null, roiPlan=1, DISCOUNT=null, dbTimerInt=null, TESTMODE=false;
+  function basePriceOf(p){if(TESTMODE&&p.id==='start')return 1000;return Math.round(p.price*(billing===3?.85:1)/1000)*1000}
+  function discountAppliesTo(p){return !(TESTMODE&&p.id==='start') && DISCOUNT && (!DISCOUNT.plan_id || DISCOUNT.plan_id===p.id)}
   function priceOf(p){
     var base=basePriceOf(p);
     if(discountAppliesTo(p)) return Math.round(base*(1-DISCOUNT.percent/100)/1000)*1000;
@@ -717,6 +717,7 @@ footer{padding:32px 0 48px;border-top:1px solid var(--line);color:var(--muted);f
 
   renderPlans();
   loadDiscount();
+  fetch('/api/config').then(function(r){return r.ok?r.json():null}).then(function(c){if(c&&c.testMode){TESTMODE=true;renderPlans()}}).catch(function(){});
 })();
 </script>
 </body>
