@@ -101,11 +101,10 @@ async function loadAll(){
 $$('.tabs button').forEach(b=>b.onclick=()=>{$$('.tabs button').forEach(x=>x.classList.toggle('on',x===b));$$('main section').forEach(s=>s.classList.toggle('hide',s.id!=='p-'+b.dataset.t))});
 
 function renderOver(){
-  $('#p-over').innerHTML='<div class="card"><h3>سفارش‌های اخیر</h3>'+(OVER.orders.length?OVER.orders.map(o=>
+  $('#p-over').innerHTML='<div class="card"><div class="row" style="border:0;padding:0"><div><b>حالت تست پرداخت</b><br><span class="mu">با روشن‌کردن، قیمت پلن «شروع» '+fa(1000)+' تومان در ماه می‌شود (بدون تخفیف). بعد از تست حتماً خاموشش کن.</span></div>'+
+'<label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" id="testToggle" data-f="testmode"'+(SET.testMode?' checked':'')+'> <b style="color:'+(SET.testMode?'#c0392b':'inherit')+'">'+(SET.testMode?'روشن':'خاموش')+'</b></label></div></div>'+'<div class="card"><h3>سفارش‌های اخیر</h3>'+(OVER.orders.length?OVER.orders.map(o=>
     '<div class="row"><span>'+esc(o.phone)+' · '+esc(o.plan_name)+' ('+fa(o.cycle)+' ماهه)</span><span class="tag '+o.status+'">'+o.status+'</span></div>'
   ).join(''):'<p class="mu">سفارشی ثبت نشده.</p>')+'</div>'+
-   '<div class="card"><div class="row" style="border:0;padding:0"><div><b>حالت تست پرداخت</b><br><span class="mu">با روشن‌کردن، قیمت پلن «شروع» '+fa(1000)+' تومان در ماه می‌شود (بدون تخفیف). بعد از تست حتماً خاموشش کن.</span></div>'+
-   '<label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" id="testToggle" data-f="testmode"'+(SET.testMode?' checked':'')+'> <b style="color:'+(SET.testMode?'#c0392b':'inherit')+'">'+(SET.testMode?'روشن':'خاموش')+'</b></label></div></div>'+
    '<div class="card"><b>'+fa(OVER.pendingDeliverables)+'</b> <span class="mu">آیتم تحویل‌نشده</span> · <b>'+fa(OVER.openTickets)+'</b> <span class="mu">تیکت باز</span></div>';
 }
 
