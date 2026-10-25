@@ -85,7 +85,7 @@ $('#loginBtn').onclick=async function(){
 };
 function adminLogout(){api('POST','/api/admin/logout').then(()=>location.reload())}
 
-var OVER=null,DLV=[],CON=[],TIK=[],DIS=[];
+var SET={testMode:false},OVER=null,DLV=[],CON=[],TIK=[],DIS=[];
 var PLAN_NAMES={start:'شروع',growth:'رشد',scale:'تسلط'};
 async function boot(){
   var m=await api('GET','/api/admin/me');
@@ -94,8 +94,8 @@ async function boot(){
   await loadAll();
 }
 async function loadAll(){
-  var a=await Promise.all([api('GET','/api/admin/overview'),api('GET','/api/admin/deliverables'),api('GET','/api/admin/content'),api('GET','/api/admin/tickets'),api('GET','/api/admin/discounts')]);
-  OVER=a[0].data;DLV=a[1].data||[];CON=a[2].data||[];TIK=a[3].data||[];DIS=a[4].data||[];
+  var a=await Promise.all([api('GET','/api/admin/overview'),api('GET','/api/admin/deliverables'),api('GET','/api/admin/content'),api('GET','/api/admin/tickets'),api('GET','/api/admin/discounts'),api('GET','/api/admin/settings')]);
+  OVER=a[0].data;DLV=a[1].data||[];CON=a[2].data||[];TIK=a[3].data||[];DIS=a[4].data||[];SET=a[5].data||{testMode:false};
   renderOver();renderDlv();renderCon();renderTik();renderDis();
 }
 $$('.tabs button').forEach(b=>b.onclick=()=>{$$('.tabs button').forEach(x=>x.classList.toggle('on',x===b));$$('main section').forEach(s=>s.classList.toggle('hide',s.id!=='p-'+b.dataset.t))});
@@ -104,6 +104,8 @@ function renderOver(){
   $('#p-over').innerHTML='<div class="card"><h3>سفارش‌های اخیر</h3>'+(OVER.orders.length?OVER.orders.map(o=>
     '<div class="row"><span>'+esc(o.phone)+' · '+esc(o.plan_name)+' ('+fa(o.cycle)+' ماهه)</span><span class="tag '+o.status+'">'+o.status+'</span></div>'
   ).join(''):'<p class="mu">سفارشی ثبت نشده.</p>')+'</div>'+
+   '<div class="card"><div class="row" style="border:0;padding:0"><div><b>حالت تست پرداخت</b><br><span class="mu">با روشن‌کردن، قیمت پلن «شروع» '+fa(1000)+' تومان در ماه می‌شود (بدون تخفیف). بعد از تست حتماً خاموشش کن.</span></div>'+
+   '<label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" id="testToggle" data-f="testmode"'+(SET.testMode?' checked':'')+'> <b style="color:'+(SET.testMode?'#c0392b':'inherit')+'">'+(SET.testMode?'روشن':'خاموش')+'</b></label></div></div>'+
    '<div class="card"><b>'+fa(OVER.pendingDeliverables)+'</b> <span class="mu">آیتم تحویل‌نشده</span> · <b>'+fa(OVER.openTickets)+'</b> <span class="mu">تیکت باز</span></div>';
 }
 
@@ -155,6 +157,14 @@ function renderDis(){
     }).join(''):'<p class="mu">هنوز کد تخفیفی نساختی.</p>')+'</div>';
 }
 
+document.addEventListener('change',async function(e){
+  if(e.target.dataset&&e.target.dataset.f==='testmode'){
+    var on=e.target.checked;
+    var r=await api('POST','/api/admin/settings',{testMode:on});
+    if(!r.ok){e.target.checked=!on;return toast(r.data.error||'انجام نشد.',1)}
+    toast(on?'حالت تست روشن شد: پلن شروع ۱۰۰۰ تومان':'حالت تست خاموش شد.');loadAll();
+  }
+});
 document.addEventListener('click',async function(e){
   var f=e.target.dataset.f;if(!f)return;
   var id=e.target.dataset.id;
