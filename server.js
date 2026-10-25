@@ -110,6 +110,7 @@ async function initDb() {
       max_uses INTEGER, used_count INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT now()
     );
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_code VARCHAR(30);
+    CREATE TABLE IF NOT EXISTS settings (key VARCHAR(50) PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS deliverables (
       id SERIAL PRIMARY KEY, order_id INTEGER REFERENCES orders(id), user_id INTEGER REFERENCES users(id),
       title VARCHAR(255) NOT NULL, item_type VARCHAR(20) NOT NULL, automation VARCHAR(10) NOT NULL,
@@ -399,6 +400,26 @@ app.post('/api/admin/content/:id', requireAdmin, async (req, res) => {
   } catch (e) { fail(res, e); }
 });
 
+/* ---------- حالت تست (قیمت پلن شروع = ۱۰۰۰ تومان) ---------- */
+const TEST_PRICE_TOMAN = 1000;
+async function isTestMode() {
+  const r = await pool.query("SELECT value FROM settings WHERE key='test_mode'");
+  return r.rows[0]?.value === '1';
+}
+app.get('/api/config', async (req, res) => {
+  try { res.json({ testMode: await isTestMode(), testPrice: TEST_PRICE_TOMAN }); } catch (e) { res.json({ testMode: false, testPrice: TEST_PRICE_TOMAN }); }
+});
+app.get('/api/admin/settings', requireAdmin, async (req, res) => {
+  try { res.json({ testMode: await isTestMode(), testPrice: TEST_PRICE_TOMAN }); } catch (e) { fail(res, e); }
+});
+app.post('/api/admin/settings', requireAdmin, async (req, res) => {
+  try {
+    const on = req.body?.testMode ? '1' : '0';
+    await pool.query("INSERT INTO settings(key,value) VALUES('test_mode',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [on]);
+    res.json({ ok: true, testMode: on === '1' });
+  } catch (e) { fail(res, e); }
+});
+
 /* ---------- کدهای تخفیف ---------- */
 async function findValidDiscount(code, planId) {
   if (!code) return null;
@@ -461,10 +482,11 @@ app.post('/api/payment/request', async (req, res) => {
     const plan = PLANS.find(p => p.id === planId);
     if (!plan) return res.status(400).json({ error: 'پلن نامعتبر است.' });
     const cycle = Number(billing) === 3 ? 3 : 1;
-    const monthly = cycle === 3 ? Math.round((plan.price * 0.85) / 1000) * 1000 : plan.price;
+    const testMode = plan.id === 'start' && await isTestMode();
+    const monthly = testMode ? TEST_PRICE_TOMAN : (cycle === 3 ? Math.round((plan.price * 0.85) / 1000) * 1000 : plan.price);
     let amountToman = monthly * cycle;
     let appliedDiscount = null;
-    if (discountCode) {
+    if (discountCode && !testMode) {
       appliedDiscount = await findValidDiscount(discountCode, plan.id);
       if (appliedDiscount) amountToman = Math.round((amountToman * (1 - appliedDiscount.percent / 100)) / 1000) * 1000;
     }
