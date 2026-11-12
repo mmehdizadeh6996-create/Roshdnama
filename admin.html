@@ -111,11 +111,12 @@ function renderOver(){
 var DST={pending:'در انتظار',in_progress:'در حال انجام',done:'تحویل‌شده'};
 function renderDlv(){
   if(!DLV.length){$('#p-dlv').innerHTML='<p class="mu">آیتمی نیست.</p>';return}
-  $('#p-dlv').innerHTML=DLV.map(d=>'<div class="card"><div class="row" style="border:0;padding:0"><div><b>'+esc(d.phone)+'</b><br>'+esc(d.title)+' <span class="mu">('+(d.item_type==='one_time'?'یک‌بار':'دوره '+fa(d.period_index))+(d.automation==='ai'?' · هوش مصنوعی':'')+')</span></div>'+
+  $('#p-dlv').innerHTML=DLV.map(d=>'<div class="card"><div class="row" style="border:0;padding:0"><div><b>'+esc(d.phone)+'</b><br>'+esc(d.title)+' <span class="mu">('+(d.item_type==='one_time'?'یک\u200cبار':'دوره '+fa(d.period_index))+(d.automation==='ai'?' · هوش مصنوعی':'')+(d.kind?' · خودکار':'')+')</span>'+(d.kind&&d.due_at&&d.status!=='done'?'<br><span class="mu">موعد: '+new Date(d.due_at).toLocaleDateString('fa-IR')+'</span>':'')+(d.last_error&&d.status!=='done'?'<br><span class="mu" style="color:#b42318">خطا: '+esc(d.last_error)+'</span>':'')+'</div>'+
     '<select class="sel" data-id="'+d.id+'" data-f="dlvstatus"><option value="pending"'+(d.status==='pending'?' selected':'')+'>در انتظار</option><option value="in_progress"'+(d.status==='in_progress'?' selected':'')+'>در حال انجام</option><option value="done"'+(d.status==='done'?' selected':'')+'>تحویل‌شده</option></select></div>'+
     '<textarea class="inp" data-id="'+d.id+'" data-f="dlvresult" placeholder="توضیح یا نتیجه‌ی تحویل (اختیاری)">'+esc(d.result||'')+'</textarea>'+
     '<button class="btn sm" data-id="'+d.id+'" data-f="dlvsave" style="margin-top:8px">ذخیره</button>'+
-    (d.automation==='ai'?' <button class="btn g sm" data-id="'+d.id+'" data-f="dlvgen" style="margin-top:8px">✨ تولید با هوش مصنوعی</button>':'')+
+    (d.automation==='ai'&&!d.kind?' <button class="btn g sm" data-id="'+d.id+'" data-f="dlvgen" style="margin-top:8px">✨ تولید با هوش مصنوعی</button>':'')+
+    (d.kind&&d.status!=='done'?' <button class="btn g sm" data-id="'+d.id+'" data-f="dlvretry" style="margin-top:8px">🔁 تلاش مجدد خودکار</button>':'')+
     '</div>').join('');
 }
 function renderCon(){
@@ -172,6 +173,10 @@ document.addEventListener('click',async function(e){
     var status=card.querySelector('[data-f=dlvstatus]').value, result=card.querySelector('[data-f=dlvresult]').value;
     var r=await api('POST','/api/admin/deliverables/'+id,{status:status,result:result});
     if(!r.ok)return toast(r.data.error||'ذخیره نشد.',1);toast('ذخیره شد.');loadAll();
+  }
+  if(f==='dlvretry'){
+    var r=await api('POST','/api/admin/deliverables/'+id+'/retry',{});
+    if(!r.ok)return toast(r.data.error||'انجام نشد.',1);toast('دوباره در صف قرار گرفت.');loadAll();
   }
   if(f==='dlvgen'){
     var old=e.target.textContent;e.target.disabled=true;e.target.textContent='در حال تولید…';
