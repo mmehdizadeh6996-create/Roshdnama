@@ -217,16 +217,28 @@ function render(){
    '<div class="card"><h3>روند امتیاز سئو</h3>'+chart(ANA)+'</div></div>';
 
   /* برنامه‌ی اجرا */
-  var DST={pending:'در انتظار',in_progress:'در حال انجام',done:'تحویل‌شده'};
+  var DST={pending:'در انتظار',in_progress:'در حال انجام',done:'تحویل\u200cشده',failed:'در حال تلاش مجدد'};
+  function dlvMeta(d){
+    if(!d.kind)return AUT[d.automation]+(d.result?'<br>'+esc(d.result):'');
+    if(d.status==='done')return 'تحویل: '+dt(d.delivered_at)+(d.summary?'<br>'+esc(d.summary):'');
+    if(!d.due_at)return 'بعد از ثبت آدرس سایت شروع می\u200cشود';
+    return d.status==='in_progress'?'در حال آماده\u200cسازی…':'موعد تحویل: '+dt(d.due_at);
+  }
+  function dlvLinks(d){
+    if(!(d.kind&&d.has_doc&&d.status==='done'))return '';
+    var u='/api/dashboard/deliverables/'+d.id+'/view';
+    return '<div style="margin-top:8px;display:flex;gap:8px"><a class="btn" style="padding:5px 14px;min-height:32px;font-size:.82rem;text-decoration:none" target="_blank" rel="noopener" href="'+u+'">مشاهده</a><a class="btn g" style="padding:5px 14px;min-height:32px;font-size:.82rem;text-decoration:none" href="'+u+'?dl=1">دانلود</a></div>';
+  }
+  var siteBox=S.site_url?'':'<div class="card" style="margin-bottom:16px;border:1.5px solid var(--br)"><h3>آدرس سایتت را ثبت کن</h3><p class="mu" style="margin:6px 0">به\u200cمحض ثبت آدرس، همه\u200cی خدمات پلنت به\u200cصورت خودکار و طبق برنامه ساخته و همین\u200cجا تحویل داده می\u200cشود.</p><form data-f="profile2" style="display:flex;gap:10px;flex-wrap:wrap"><input class="inp" name="site_url" style="direction:ltr;text-align:right;flex:1;min-width:200px" placeholder="example.ir"><button class="btn">شروع تحویل خودکار</button></form></div>';
   var AUT={ai:'خودکار (هوش مصنوعی)',manual:'دستی توسط تیم'};
   if(!pl){$('#t-plan').innerHTML=lockBox()}
   else if(!DLV.length){$('#t-plan').innerHTML='<div class="card"><p class="mu">برنامه‌ی اجرای پلنت در حال آماده‌سازی است.</p></div>'}
   else{
     var byMonth={};DLV.forEach(d=>{var k=d.item_type==='one_time'?'یک‌بار':(d.item_type==='biweekly'?'دو هفته '+fa(d.period_index):'ماه '+fa(d.period_index));(byMonth[k]=byMonth[k]||[]).push(d)});
     var done=DLV.filter(d=>d.status==='done').length;
-    $('#t-plan').innerHTML='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3>پیشرفت کلی</h3><b>'+fa(done)+' از '+fa(DLV.length)+'</b></div><div class="bar"><i style="width:'+Math.round(done/DLV.length*100)+'%"></i></div></div>'+
+    $('#t-plan').innerHTML=siteBox+'<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3>پیشرفت کلی</h3><b>'+fa(done)+' از '+fa(DLV.length)+'</b></div><div class="bar"><i style="width:'+Math.round(done/DLV.length*100)+'%"></i></div></div>'+
      Object.keys(byMonth).map(k=>'<div class="card" style="margin-top:16px"><h3>'+k+'</h3>'+byMonth[k].map(d=>
-       '<div class="li" style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div>'+esc(d.title)+'</div><span class="mu" style="font-size:.78rem">'+AUT[d.automation]+(d.result?'<br>'+esc(d.result):'')+'</span></div><span class="tag '+d.status+'">'+DST[d.status]+'</span></div>'
+       '<div class="li" style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div>'+esc(d.doc_title&&d.status==='done'&&d.kind==='article'?d.doc_title:d.title)+'</div><span class="mu" style="font-size:.78rem">'+dlvMeta(d)+'</span>'+dlvLinks(d)+'</div><span class="tag '+(d.status==='failed'?'pending':d.status)+'">'+DST[d.status]+'</span></div>'
      ).join('')+'</div>').join('');
   }
 
@@ -273,6 +285,7 @@ document.addEventListener('submit',function(e){
   if(k==='ticket')act(btn,()=>api('POST','/api/dashboard/tickets',v),'تیکت ارسال شد.').then(ok=>{if(ok)tab('support')});
   if(k==='reply')act(btn,()=>api('POST','/api/dashboard/tickets/'+f.dataset.id+'/messages',v),'پاسخ ارسال شد.').then(()=>tab('support'));
   if(k==='profile')act(btn,()=>api('POST','/api/dashboard/profile',v),'ذخیره شد.').then(()=>tab('account'));
+  if(k==='profile2')act(btn,()=>api('POST','/api/dashboard/profile',v),'ثبت شد — تحویل خودکار خدمات شروع شد.').then(()=>tab('plan'));
 });
 
 (function(){var q=new URLSearchParams(location.search),p=q.get('payment');
