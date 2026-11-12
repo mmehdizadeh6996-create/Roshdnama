@@ -18,17 +18,8 @@ const KAVENEGAR_TEMPLATE = process.env.KAVENEGAR_TEMPLATE || 'otp';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const PSI_KEY = process.env.PSI_API_KEY || '';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-async function callClaude(prompt, maxTokens) {
-  if (!ANTHROPIC_API_KEY) throw new Error('NO_KEY');
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: maxTokens || 1200, messages: [{ role: 'user', content: prompt }] }),
-  });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data?.error?.message || 'خطای سرویس هوش مصنوعی');
-  return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
-}
+// هوش مصنوعی: Gemini / Claude / OpenAI (هر کدام کلیدش تنظیم شده باشد) — تعریف در fulfil.js
+async function callClaude(prompt, maxTokens) { return fulfil.callAI('', prompt, maxTokens || 1200); }
 
 const PLANS = [
   { id: 'start', name: 'شروع', price: 9800000 },
@@ -119,7 +110,8 @@ async function initDb() {
     );
   `);
 }
-initDb().catch(err => console.error('DB init error:', err));
+const fulfil = require('./fulfil')({ pool, getPSI });
+initDb().then(() => fulfil.init()).then(() => fulfil.start()).catch(err => console.error('DB init error:', err));
 
 async function findOrCreateUser(phone) {
   const found = await pool.query('SELECT * FROM users WHERE phone=$1', [phone]);
@@ -190,21 +182,7 @@ app.post('/api/admin/login', (req, res) => {
 app.post('/api/admin/logout', (req, res) => { res.clearCookie('admin_session'); res.json({ ok: true }); });
 app.get('/api/admin/me', requireAdmin, (req, res) => res.json({ ok: true }));
 
-/* ---------- تولید خودکار برنامه‌ی تحویل بعد از پرداخت موفق ---------- */
-async function generateDeliverables(orderId, userId, planId, cycle) {
-  const items = PLAN_ITEMS[planId] || [];
-  const rows = [];
-  for (const it of items) {
-    let count = 1;
-    if (it.type === 'monthly') count = cycle;
-    if (it.type === 'biweekly') count = cycle * 2;
-    for (let i = 1; i <= count; i++) rows.push([orderId, userId, it.title, it.type, it.automation, i]);
-  }
-  if (!rows.length) return;
-  const values = [], params = [];
-  rows.forEach((r, i) => { const b = i * 6; values.push(`($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6})`); params.push(...r); });
-  await pool.query(`INSERT INTO deliverables(order_id, user_id, title, item_type, automation, period_index) VALUES ${values.join(',')}`, params);
-}
+/* ---------- برنامهی تحویل خودکار بعد از پرداخت موفق: fulfil.js ---------- */
 
 /* ---------- خلاصه و بخش‌های داشبورد مشتری ---------- */
 const PLAN_LIMITS = { start: { content: 2, analyses: 10 }, growth: { content: 8, analyses: 30 }, scale: { content: 20, analyses: 100 } };
@@ -232,7 +210,11 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
 app.post('/api/dashboard/profile', requireAuth, async (req, res) => {
   const host = cleanHost(req.body?.site_url);
   if (host && !isValidHost(host)) return res.status(400).json({ error: 'آدرس سایت معتبر نیست.' });
-  try { await pool.query('UPDATE users SET site_url=$1 WHERE id=$2', [host || null, req.session.uid]); res.json({ ok: true, site_url: host }); } catch (e) { fail(res, e); }
+  try {
+    await pool.query('UPDATE users SET site_url=$1 WHERE id=$2', [host || null, req.session.uid]);
+    if (host) fulfil.armSite(req.session.uid).then(() => fulfil.tick()).catch(e => console.error('arm error', e.message));
+    res.json({ ok: true, site_url: host });
+  } catch (e) { fail(res, e); }
 });
 
 async function guardPlan(req, res, kind) {
@@ -268,7 +250,7 @@ app.post('/api/dashboard/content', requireAuth, async (req, res) => {
     if (topic.length < 3 || topic.length > 255) return res.status(400).json({ error: 'موضوع باید بین ۳ تا ۲۵۵ کاراکتر باشد.' });
     if (!(await guardPlan(req, res, 'content'))) return;
     const row = (await pool.query('INSERT INTO content_requests(user_id, topic, keywords) VALUES($1,$2,$3) RETURNING *', [req.session.uid, topic, keywords])).rows[0];
-    if (ANTHROPIC_API_KEY) {
+    if (fulfil.aiConfigured()) {
       try {
         const text = await callClaude(`یک مقاله‌ی سئوشده و کامل به زبان فارسی درباره‌ی موضوع «${topic}» بنویس. کلمات کلیدی هدف: ${keywords || '—'}. مقاله باید حداقل ۵۰۰ کلمه، ساختارمند با زیرتیتر، طبیعی و آماده‌ی انتشار در وبلاگ باشد. فقط متن نهایی مقاله را بنویس، بدون توضیح اضافه.`, 2200);
         const upd = await pool.query('UPDATE content_requests SET status=$1, result=$2 WHERE id=$3 RETURNING *', ['done', text, row.id]);
@@ -310,10 +292,10 @@ app.post('/api/dashboard/tickets/:id/messages', requireAuth, async (req, res) =>
 /* ---------- برنامه‌ی اجرا (تحویل‌ها) — مشتری ---------- */
 app.get('/api/dashboard/plan', requireAuth, async (req, res) => {
   try {
-    const rows = (await pool.query('SELECT id, title, item_type, automation, period_index, status, result, created_at, updated_at FROM deliverables WHERE user_id=$1 ORDER BY period_index ASC, id ASC', [req.session.uid])).rows;
-    res.json(rows);
+    res.json(await fulfil.planRows(req.session.uid));
   } catch (e) { fail(res, e); }
 });
+app.get('/api/dashboard/deliverables/:id/view', requireAuth, (req, res) => fulfil.serveDocument(req, res).catch(e => fail(res, e)));
 
 /* ---------- پنل ادمین ---------- */
 app.get('/api/admin/overview', requireAdmin, async (req, res) => {
@@ -328,7 +310,7 @@ app.get('/api/admin/overview', requireAdmin, async (req, res) => {
 app.get('/api/admin/deliverables', requireAdmin, async (req, res) => {
   try {
     const status = req.query.status;
-    const rows = (await pool.query(`SELECT d.id, d.title, d.item_type, d.automation, d.period_index, d.status, d.result, d.created_at, u.phone, d.order_id
+    const rows = (await pool.query(`SELECT d.id, d.title, d.item_type, d.automation, d.period_index, d.status, d.result, d.created_at, u.phone, d.order_id, d.kind, d.due_at, d.attempts, d.last_error
       FROM deliverables d JOIN users u ON u.id=d.user_id ${status ? 'WHERE d.status=$1' : ''} ORDER BY d.created_at ASC LIMIT 300`, status ? [status] : [])).rows;
     res.json(rows);
   } catch (e) { fail(res, e); }
@@ -344,7 +326,7 @@ app.post('/api/admin/deliverables/:id', requireAdmin, async (req, res) => {
 });
 app.post('/api/admin/deliverables/:id/generate', requireAdmin, async (req, res) => {
   try {
-    if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'کلید هوش مصنوعی هنوز تنظیم نشده است.' });
+    if (!fulfil.aiConfigured()) return res.status(500).json({ error: 'کلید هوش مصنوعی هنوز تنظیم نشده است.' });
     const d = (await pool.query('SELECT d.*, u.site_url FROM deliverables d JOIN users u ON u.id=d.user_id WHERE d.id=$1', [req.params.id])).rows[0];
     if (!d) return res.status(404).json({ error: 'آیتم پیدا نشد.' });
     if (d.automation !== 'ai') return res.status(400).json({ error: 'این آیتم خودکار نیست.' });
@@ -366,6 +348,9 @@ app.post('/api/admin/deliverables/:id/generate', requireAdmin, async (req, res) 
     const upd = await pool.query('UPDATE deliverables SET status=$1, result=$2, updated_at=now() WHERE id=$3 RETURNING id, title, item_type, automation, period_index, status, result', ['done', text, d.id]);
     res.json(upd.rows[0]);
   } catch (e) { console.error(e); res.status(500).json({ error: 'تولید با هوش مصنوعی ناموفق بود.', detail: e.message }); }
+});
+app.post('/api/admin/deliverables/:id/retry', requireAdmin, async (req, res) => {
+  try { const n = await fulfil.retry(Number(req.params.id) || 0); fulfil.tick().catch(() => {}); res.json({ ok: n > 0 }); } catch (e) { fail(res, e); }
 });
 app.get('/api/admin/tickets', requireAdmin, async (req, res) => {
   try {
@@ -531,7 +516,7 @@ app.get('/api/payment/callback', async (req, res) => {
     const vData = await vRes.json();
     if (vData.result === 100 || vData.result === 201) {
       await pool.query("UPDATE orders SET status='paid', ref_number=$1 WHERE id=$2", [vData.refNumber || trackId, orderId]);
-      await generateDeliverables(order.id, order.user_id, order.plan_id, order.cycle);
+      try { await fulfil.scheduleOrder(order.id, order.user_id, order.plan_id, order.cycle); fulfil.tick().catch(() => {}); } catch (e) { console.error('schedule error', e); }
       const userRes = await pool.query('SELECT * FROM users WHERE id=$1', [order.user_id]);
       if (userRes.rows[0]) setSessionCookie(res, userRes.rows[0]);
       return res.redirect(`/dashboard.html?payment=success&ref=${encodeURIComponent(vData.refNumber || trackId)}`);
