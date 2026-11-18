@@ -419,14 +419,23 @@ async function findValidDiscount(code, planId) {
 }
 app.get('/api/discounts/active', async (req, res) => {
   try {
+    // کد اختصاصی کاربر (U-XXXXXX) فقط وقتی نشان داده می‌شود که با لینک ?code= آمده باشد؛ در بنر عمومی هرگز دیده نمی‌شود
+    const personal = String(req.query.code || '').trim().toUpperCase().slice(0, 30);
+    if (/^U-[A-Z0-9]{4,12}$/.test(personal)) {
+      const p = await pool.query(
+        `SELECT code, percent, plan_id, expires_at FROM discounts
+         WHERE code=$1 AND active=true AND expires_at > now() AND (max_uses IS NULL OR used_count < max_uses)`, [personal]);
+      if (p.rows[0]) return res.json(p.rows[0]);
+    }
     const r = await pool.query(
       `SELECT code, percent, plan_id, expires_at FROM discounts
-       WHERE active=true AND expires_at > now() AND (max_uses IS NULL OR used_count < max_uses)
+       WHERE active=true AND expires_at > now() AND (max_uses IS NULL OR used_count < max_uses) AND code NOT LIKE 'U-%'
        ORDER BY expires_at ASC LIMIT 1`
     );
     res.json(r.rows[0] || null);
   } catch (e) { fail(res, e); }
 });
+
 app.get('/api/admin/discounts', requireAdmin, async (req, res) => {
   try { res.json((await pool.query('SELECT * FROM discounts ORDER BY created_at DESC')).rows); } catch (e) { fail(res, e); }
 });
